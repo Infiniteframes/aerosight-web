@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aerosight — Flight Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700;9..40,900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080c14;--surface:#0d1320;--surface2:#111827;
+  --glass:rgba(255,255,255,0.04);--glass-border:rgba(255,255,255,0.08);
+  --blue:#3b82f6;--teal:#2dd4bf;
+  --text:#f1f5f9;--muted:#64748b;--dim:#334155;--border:rgba(255,255,255,0.06);
+  --error:#ef4444;--error-bg:rgba(239,68,68,0.08);--error-border:rgba(239,68,68,0.25);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+.bg-layer{position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(59,130,246,0.13) 0%,transparent 70%),radial-gradient(ellipse 50% 40% at 85% 80%,rgba(45,212,191,0.09) 0%,transparent 60%);}
+.bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 100% 80% at 50% 0%,black 20%,transparent 100%);}
+.wrap{position:relative;z-index:1}
+
+/* ── NAV ── */
+nav{display:flex;align-items:center;justify-content:space-between;padding:0 2.5rem;height:60px;border-bottom:1px solid var(--border);backdrop-filter:blur(20px);background:rgba(8,12,20,0.8);position:sticky;top:0;z-index:1000;}
+.logo{display:flex;align-items:center;gap:10px;font-size:1.05rem;font-weight:700;letter-spacing:-.02em;cursor:pointer;user-select:none;}
+.logo-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#2dd4bf);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;}
+.logo-sub{color:var(--muted);font-weight:300}
+.nav-tabs{display:flex;align-items:center;gap:.2rem}
+.nav-btn{background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:.84rem;padding:.4rem .9rem;border-radius:6px;cursor:pointer;transition:all .2s;}
+.nav-btn:hover{color:var(--text);background:var(--glass)}
+.nav-btn.active{color:var(--text);background:rgba(59,130,246,0.12);font-weight:500;}
+.live-pill{display:flex;align-items:center;gap:6px;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.18);border-radius:20px;padding:.3rem .9rem;font-size:.75rem;color:var(--teal);}
+.pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* ── PAGES ── */
+.page{display:none}.page.active{display:block}
+.grad{background:linear-gradient(135deg,#3b82f6,#2dd4bf);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+
+/* ── SHARED COMPONENTS ── */
+.fl{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.fi{background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:.75rem 1rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem;width:100%;outline:none;transition:all .2s;-webkit-appearance:none;appearance:none;cursor:pointer;}
+.fi:focus{border-color:rgba(59,130,246,0.45);background:rgba(59,130,246,0.06)}
+.fi option{background:#0d1320;color:#f1f5f9;}
+.fi.err{border-color:var(--error)!important;background:var(--error-bg)!important;box-shadow:0 0 0 2px var(--error-border);}
+.fw{position:relative}
+.fi-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.fw .fi{padding-left:2.2rem}
+.cta-btn{width:100%;background:linear-gradient(135deg,#2563eb,#0ea5e9,#2dd4bf);border:none;border-radius:14px;padding:1rem;color:#fff;font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:all .3s;box-shadow:0 0 32px rgba(59,130,246,0.4);}
+.cta-btn:hover{transform:translateY(-1px);box-shadow:0 0 55px rgba(59,130,246,0.55);}
+.cta-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;}
+.cta-inner{display:flex;align-items:center;justify-content:center;gap:8px}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rc{background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:16px;overflow:hidden;backdrop-filter:blur(16px);}
+.hidden{display:none!important}
+
+/* ── ERROR BANNER ── */
+.err-banner{display:none;align-items:center;gap:10px;background:var(--error-bg);border:1px solid var(--error-border);border-radius:12px;padding:.8rem 1.1rem;margin-top:.75rem;font-size:.84rem;color:#fca5a5;}
+.err-banner.show{display:flex}
+.err-icon{width:18px;height:18px;border-radius:50%;background:var(--error);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;}
+
+/* ── CALENDAR ── */
+.date-wrap{position:relative}
+.date-btn{background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:.75rem 1rem .75rem 2.6rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem;width:100%;text-align:left;cursor:pointer;transition:all .2s;user-select:none;white-space:nowrap;}
+.date-btn:hover{border-color:rgba(59,130,246,0.4);background:rgba(59,130,246,0.05);}
+.date-btn.empty{color:var(--muted)}
+.date-btn.err{border-color:var(--error)!important;background:var(--error-bg)!important;box-shadow:0 0 0 2px var(--error-border);}
+.date-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.cal-dropdown{position:absolute;top:calc(100% + 6px);left:0;z-index:600;background:var(--surface);border:1px solid var(--glass-border);border-radius:16px;padding:1rem;box-shadow:0 24px 60px rgba(0,0,0,0.7);min-width:270px;display:none;}
+.cal-dropdown.open{display:block}
+.cal-dropdown.flip{top:auto;bottom:calc(100% + 6px);}
+.cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;}
+.cal-nav-btn{background:var(--glass);border:1px solid var(--glass-border);border-radius:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:14px;transition:all .15s;}
+.cal-nav-btn:hover{color:var(--text);background:rgba(255,255,255,0.08)}
+.cal-title{font-size:.88rem;font-weight:600}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.cal-dh{font-size:.63rem;color:var(--muted);text-align:center;padding:.35rem 0;font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.cal-d{font-size:.8rem;text-align:center;padding:.38rem .1rem;border-radius:6px;cursor:pointer;color:var(--muted);transition:all .15s;}
+.cal-d:hover:not(.other):not(.sel){background:var(--glass);color:var(--text)}
+.cal-d.today{color:var(--blue);font-weight:700}
+.cal-d.sel{background:linear-gradient(135deg,#3b82f6,#2dd4bf);color:#fff;font-weight:700}
+.cal-d.other{opacity:.2;pointer-events:none;}
+
+/* ── ANALYSIS ANIMATION ── */
+.ana-panel{display:none;background:rgba(13,19,32,0.8);border:1px solid var(--glass-border);border-radius:16px;padding:3rem 2rem;text-align:center;backdrop-filter:blur(24px);flex-direction:column;align-items:center;gap:.9rem;}
+.ana-panel.active{display:flex}
+.a-orb{width:70px;height:70px;border-radius:50%;border:2px solid transparent;background:linear-gradient(var(--surface2),var(--surface2)) padding-box,linear-gradient(135deg,var(--blue),var(--teal)) border-box;display:flex;align-items:center;justify-content:center;font-size:26px;position:relative;}
+.a-orb::after{content:'';position:absolute;inset:-8px;border-radius:50%;border:1px solid rgba(59,130,246,0.22);animation:ripple 1.5s ease-out infinite;}
+@keyframes ripple{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.65)}}
+.a-steps{display:flex;flex-direction:column;gap:.4rem;width:280px;margin-top:.4rem}
+.a-step{display:flex;align-items:center;gap:8px;font-size:.77rem;color:var(--muted);opacity:0;transition:opacity .3s}
+.a-step.vis{opacity:1;color:var(--text)}
+.a-dot{width:5px;height:5px;border-radius:50%;background:var(--teal);flex-shrink:0}
+
+/* ── RESULT COMPONENTS ── */
+.result-wrap{opacity:0;transform:translateY(10px);transition:opacity .4s,transform .4s;display:flex;flex-direction:column;gap:1.2rem;}
+.result-wrap.show{opacity:1;transform:translateY(0)}
+.risk-block{padding:1.85rem;display:grid;grid-template-columns:1fr auto;gap:2rem;align-items:center}
+.rl{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem}
+.rh{font-size:1.55rem;font-weight:800;letter-spacing:-.03em;margin-bottom:.35rem}
+.rsub{font-size:.84rem;color:var(--muted)}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.85rem}
+.pill{padding:.28rem .65rem;border-radius:6px;font-size:.73rem;font-weight:500}
+.p-g{background:rgba(45,212,191,0.12);color:#2dd4bf;border:1px solid rgba(45,212,191,0.2)}
+.p-y{background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)}
+.p-r{background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+.p-b{background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.2)}
+.gauge-wrap{text-align:center;min-width:175px}
+.g-pct{font-size:2rem;font-weight:900;letter-spacing:-.04em;margin-bottom:.1rem}
+.g-lbl{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.info-row{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border)}
+.ic{padding:1.1rem 1.4rem;border-right:1px solid var(--border)}
+.ic:last-child{border-right:none}
+.icl{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem}
+.icv{font-size:.98rem;font-weight:600}
+.ics{font-size:.72rem;color:var(--muted);margin-top:.1rem}
+.bot-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+.rvis{display:flex;align-items:center;background:rgba(0,0,0,0.3);border-radius:12px;overflow:hidden}
+.ra{flex:1;padding:.9rem 1.1rem;text-align:center}
+.racode{font-size:1.75rem;font-weight:900;letter-spacing:-.03em}
+.raname{font-size:.7rem;color:var(--muted);margin-top:.15rem}
+.rm{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 .9rem}
+.rline{position:relative;width:100px;height:2px;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:2px}
+.rp-plane{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:16px;animation:flyplane 3s ease-in-out infinite}
+@keyframes flyplane{0%,100%{transform:translate(-50%,-50%) translateX(-10px)}50%{transform:translate(-50%,-50%) translateX(10px)}}
+.rdur{font-size:.7rem;color:var(--muted)}
+.rt-badges{display:flex;gap:.5rem;margin-top:.85rem}
+.rt-b{flex:1;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:.55rem;text-align:center}
+.rt-bv{font-size:.9rem;font-weight:700;font-family:'DM Mono',monospace}
+.rt-bk{font-size:.63rem;color:var(--muted);margin-top:.1rem}
+.ftag{font-size:.63rem;background:rgba(59,130,246,0.12);color:var(--blue);border-radius:4px;padding:.1rem .38rem;font-family:'DM Mono',monospace}
+.flist{display:flex;flex-direction:column;gap:.65rem}
+.fitem{display:flex;flex-direction:column;gap:.28rem}
+.fmeta{display:flex;justify-content:space-between;font-size:.79rem}
+.fpct{color:var(--muted);font-family:'DM Mono',monospace;font-size:.74rem}
+.bbg{height:4px;border-radius:4px;background:rgba(255,255,255,0.05);overflow:hidden}
+.bf{height:100%;border-radius:4px;width:0%;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.b0{background:linear-gradient(90deg,#3b82f6,#60a5fa)}
+.b1{background:linear-gradient(90deg,#2dd4bf,#5eead4)}
+.b2{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.b3{background:linear-gradient(90deg,#a78bfa,#c4b5fd)}
+.b4{background:linear-gradient(90deg,#64748b,#94a3b8)}
+.rec-item{display:flex;align-items:flex-start;gap:10px;padding:.65rem .9rem;border-radius:10px;font-size:.8rem;line-height:1.55;margin-bottom:.45rem}
+.rd{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15);color:#fca5a5;}
+.rw{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.15);color:#fde68a;}
+.ri-rec{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);color:#93c5fd;}
+
+/* ── LAYOUT (Tab 1) ── */
+.layout{display:grid;grid-template-columns:215px 1fr;gap:1.5rem;max-width:1260px;margin:0 auto;padding:2rem 2rem 4rem;}
+.sidebar{display:flex;flex-direction:column;gap:1rem}
+.ss{background:var(--glass);border:1px solid var(--glass-border);border-radius:14px;padding:1.2rem}
+.st{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem}
+.ri{display:flex;align-items:center;gap:8px;padding:.45rem .55rem;border-radius:8px;font-size:.83rem;color:var(--muted)}
+.ri.active{background:rgba(59,130,246,0.12);color:var(--blue)}
+.rdot{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7}
+.rb{margin-left:auto;font-size:.63rem;padding:.1rem .35rem;border-radius:4px;background:rgba(59,130,246,0.15);color:var(--blue);font-family:'DM Mono',monospace}
+.rb.soon{background:rgba(100,116,139,0.18);color:var(--muted)}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+.ss2{background:rgba(0,0,0,0.2);border-radius:8px;padding:.6rem}
+.sv{font-size:1.05rem;font-weight:700;margin-bottom:.1rem}
+.sk{font-size:.65rem;color:var(--muted)}
+.tc{color:#2dd4bf}.wc{color:#f59e0b}.dc{color:var(--muted)}.bc{color:var(--blue)}
+.search-card{background:rgba(13,19,32,0.8);border:1px solid var(--glass-border);border-radius:20px;padding:1.75rem;backdrop-filter:blur(24px);box-shadow:0 40px 80px rgba(0,0,0,0.5);text-align:left;}
+.hero-section{max-width:860px;margin:0 auto;padding:4rem 2rem 2.5rem;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:20px;padding:.35rem 1rem;font-size:.74rem;color:var(--blue);font-family:'DM Mono',monospace;letter-spacing:.04em;margin-bottom:1.75rem;}
+h1{font-size:clamp(2.2rem,5vw,3.4rem);font-weight:900;line-height:1.08;letter-spacing:-.04em;margin-bottom:1rem;}
+.hero-sub{color:var(--muted);font-size:1rem;line-height:1.7;max-width:500px;margin:0 auto 2.5rem;font-weight:300;}
+.row1{display:grid;grid-template-columns:1fr 2fr;gap:.75rem;margin-bottom:.75rem;align-items:end}
+.row2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;margin-bottom:1rem;align-items:end}
+.from-to{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:4px;}
+.swap-btn{width:30px;height:30px;border-radius:50%;background:var(--surface2);border:1px solid var(--glass-border);color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s;flex-shrink:0;}
+.swap-btn:hover{background:var(--glass);color:var(--text);transform:rotate(180deg)}
+.hint-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:1rem;border-top:1px solid var(--border)}
+.ht{background:var(--glass);border:1px solid var(--glass-border);border-radius:20px;padding:.22rem .7rem;font-size:.71rem;color:var(--muted);cursor:pointer;transition:all .2s;}
+.ht:hover{color:var(--text);border-color:rgba(255,255,255,0.15)}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;background:rgba(13,19,32,0.5);border:1px dashed rgba(255,255,255,0.07);border-radius:16px;}
+.ei{width:56px;height:56px;border-radius:16px;background:var(--glass);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem}
+
+/* ── PAGE 2 (PRESCRIPTIVE) ── */
+.page-pad{padding:2.5rem;max-width:1260px;margin:0 auto;}
+.sect-head{margin-bottom:2rem}
+.sect-head h2{font-size:1.8rem;font-weight:900;letter-spacing:-.03em;margin-bottom:.35rem}
+.sect-head p{font-size:.88rem;color:var(--muted)}
+.input-card{background:rgba(13,19,32,0.8);border:1px solid var(--glass-border);border-radius:20px;padding:1.75rem;backdrop-filter:blur(24px);box-shadow:0 40px 80px rgba(0,0,0,0.5);margin-bottom:2rem;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.2rem;}
+.stat-card{background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:14px;padding:1.2rem;backdrop-filter:blur(16px);}
+.scl{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.scv{font-size:1.6rem;font-weight:900;letter-spacing:-.03em;margin-bottom:.2rem}
+.scs{font-size:.75rem;color:var(--muted)}
+.action-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-bottom:1.2rem;}
+.sp{padding:1.4rem}
+.stit{font-size:.84rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.dep-box{border-radius:12px;padding:1rem 1.2rem;font-size:.88rem;font-weight:500;margin-top:.75rem}
+.db-d{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#fca5a5}
+.db-w{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);color:#fde68a}
+.db-g{background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.2);color:#5eead4}
+
+/* ── PAGE 3 (MAP) ── */
+#map{width:100%;height:calc(100vh - 220px);min-height:500px;background:#050a12}
+.map-wrap{margin:0 2.5rem 0;border-radius:16px;overflow:hidden;border:1px solid var(--glass-border);}
+.leaflet-container{background:#050a12!important}
+.map-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin:1.5rem 2.5rem 2rem;}
+.kpi-card{background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:14px;padding:1.2rem;backdrop-filter:blur(16px);text-align:center;}
+.kl{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.kv{font-size:1.7rem;font-weight:900;letter-spacing:-.03em;margin-bottom:.2rem}
+.ks{font-size:.72rem;color:var(--muted)}
+.legend{display:flex;align-items:center;gap:1.2rem;background:rgba(13,19,32,0.9);border:1px solid var(--glass-border);border-radius:12px;padding:.7rem 1.2rem;flex-wrap:wrap;}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--muted)}
+.leg-dot{width:10px;height:10px;border-radius:50%}
+.map-hdr{padding:2rem 2.5rem 1rem;display:flex;align-items:flex-start;justify-content:space-between;gap:2rem;}
+
+/* ── PAGE 4 (DASHBOARD) ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;}
+.kpi5{display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-bottom:1.5rem;}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-bottom:1.2rem;}
+.chart-card{background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:16px;padding:1.4rem;backdrop-filter:blur(16px);}
+.chart-card.full{grid-column:span 2}
+.ct{font-size:.9rem;font-weight:600;margin-bottom:1.2rem}
+.chart-wrap{position:relative;height:280px;}
+.chart-wrap.tall{height:340px;}
+table{width:100%;border-collapse:collapse;font-size:.82rem;}
+th{text-align:left;padding:.6rem .8rem;font-size:.68rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+td{padding:.75rem .8rem;border-bottom:1px solid rgba(255,255,255,0.03);}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{font-size:.68rem;padding:.2rem .5rem;border-radius:4px;font-weight:700;font-family:'DM Mono',monospace}
+.b-g{background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.25)}
+.b-y{background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.25)}
+.b-r{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.25)}
+.b-bl{background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.25)}
+
+/* ── PAGE 5 (MODEL) ── */
+.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem;margin-bottom:1.2rem;}
+.info-card{background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:16px;padding:1.4rem;backdrop-filter:blur(16px);}
+.ict{font-size:.84rem;font-weight:600;margin-bottom:1rem;color:var(--teal)}
+.irow{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:.82rem;}
+.irow:last-child{border-bottom:none}
+.irow .lbl{color:var(--muted)}
+.irow .val{font-weight:600;font-family:'DM Mono',monospace}
+.bar-row{display:flex;align-items:center;gap:.75rem;margin:.55rem 0;}
+.bar-lbl{font-size:.79rem;min-width:180px;color:var(--text)}
+.bar-bg2{flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.bar-pct{font-size:.75rem;font-family:'DM Mono',monospace;color:var(--muted);min-width:40px;text-align:right}
+
+
+.ferr{display:none;font-size:.68rem;color:#ef4444;margin-top:.3rem;padding-left:.2rem;}
+.ferr.show{display:block}
+
+/* ── Airline Ops Toggle ─────────────────────────────────── */
+.ops-bar{display:flex;align-items:center;justify-content:space-between;background:rgba(13,19,32,0.65);border:1px solid var(--glass-border);border-radius:14px;padding:1rem 1.4rem;cursor:pointer;transition:all .25s;backdrop-filter:blur(16px);user-select:none;}
+.ops-bar:hover{border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.04)}
+.ops-bar.open{border-color:rgba(245,158,11,0.4);border-radius:14px 14px 0 0;background:rgba(245,158,11,0.06)}
+.ops-bar.high-open{border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.05)}
+.ops-bar.high-open:hover{border-color:rgba(239,68,68,0.5)}
+.ops-left{display:flex;align-items:center;gap:10px}
+.ops-ico{width:32px;height:32px;border-radius:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.22);display:flex;align-items:center;justify-content:center;font-size:14px}
+.ops-ico.red{background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.22)}
+.ops-lbl{font-size:.88rem;font-weight:600;letter-spacing:-.01em}
+.ops-sublbl{font-size:.71rem;color:var(--muted);margin-top:.1rem}
+.ops-right{display:flex;align-items:center;gap:.75rem}
+.ops-badge{font-size:.67rem;font-family:'DM Mono',monospace;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.22);border-radius:4px;padding:.15rem .5rem}
+.ops-badge.red{background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.22)}
+.ops-chev{color:var(--muted);font-size:12px;transition:transform .3s cubic-bezier(.4,0,.2,1);display:inline-block}
+.ops-chev.open{transform:rotate(180deg)}
+.ops-drop{max-height:0;overflow:hidden;transition:max-height .5s cubic-bezier(.4,0,.2,1);background:rgba(10,15,25,0.9);border:1px solid rgba(245,158,11,0.22);border-top:none;border-radius:0 0 14px 14px;backdrop-filter:blur(20px);}
+.ops-drop.open{max-height:1000px}
+.ops-drop.red-border{border-color:rgba(239,68,68,0.25)}
+.ops-inner{padding:1.4rem}
+.ops-sev{display:flex;align-items:center;gap:10px;padding:.55rem 1rem;border-radius:10px;margin-bottom:1.2rem;border:1px solid}
+.ops-sev.mod{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.25)}
+.ops-sev.high{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25)}
+.ops-sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ops-sev.mod .ops-sev-dot{background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,0.6)}
+.ops-sev.high .ops-sev-dot{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.6)}
+.ops-sev-lbl{font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.ops-sev.mod .ops-sev-lbl{color:#f59e0b}
+.ops-sev.high .ops-sev-lbl{color:#ef4444}
+.ops-sev-code{margin-left:auto;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted)}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin-bottom:1.1rem}
+.ops-alert{background:rgba(0,0,0,0.25);border-radius:10px;border:1px solid var(--border);padding:.95rem}
+.ops-ah{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;margin-bottom:.55rem}
+.ops-ah.amber{color:#f59e0b}.ops-ah.red{color:#ef4444}.ops-ah.blue{color:#3b82f6}.ops-ah.teal{color:#2dd4bf}
+.ops-ah-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ops-ab{font-size:.77rem;color:var(--muted);line-height:1.7}
+.ops-ab strong{color:var(--text);font-weight:600}
+.ops-actions{background:rgba(0,0,0,0.2);border-radius:10px;border:1px solid var(--border);padding:.95rem 1.1rem;margin-bottom:.9rem}
+.ops-at{font-size:.68rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem}
+.ops-alist{display:flex;flex-direction:column;gap:.45rem}
+.ops-aitem{display:flex;align-items:flex-start;gap:8px;font-size:.77rem;color:var(--muted);line-height:1.6}
+.ops-anum{flex-shrink:0;width:18px;height:18px;border-radius:4px;font-size:.63rem;font-weight:700;font-family:'DM Mono',monospace;display:flex;align-items:center;justify-content:center}
+.ops-anum.amber{background:rgba(245,158,11,0.15);color:#f59e0b}
+.ops-anum.red{background:rgba(239,68,68,0.15);color:#ef4444}
+.ops-aitem span strong{color:var(--text)}
+.ops-foot{display:flex;align-items:center;justify-content:space-between;padding-top:.9rem;border-top:1px solid var(--border);font-size:.69rem;color:var(--muted)}
+.ops-ref{background:rgba(59,130,246,0.1);color:#3b82f6;border-radius:4px;padding:.1rem .38rem;font-family:'DM Mono',monospace}
+footer{border-top:1px solid var(--border);padding:1.1rem 2.5rem;display:flex;align-items:center;justify-content:space-between;font-size:.73rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="bg-grid"></div>
+<div class="wrap">
+
+<!-- NAV -->
+<nav>
+  <div class="logo" onclick="go('predict')">
+    <div class="logo-mark">A</div>
+    Aerosight <span class="logo-sub">/ intelligence</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-btn active" onclick="go('predict')">Predict</button>
+    <button class="nav-btn" onclick="go('prescriptive')">Action Plan</button>
+    <button class="nav-btn" onclick="go('map')">Network Map</button>
+    <button class="nav-btn" onclick="go('dashboard')">Dashboard</button>
+    <button class="nav-btn" onclick="go('model')">Model</button>
+  </div>
+  <div class="live-pill"><div class="pulse-dot"></div>Live Model</div>
+</nav>
+
+<!-- ====== PAGE 1: PREDICT ====== -->
+<div id="page-predict" class="page active">
+  <section class="hero-section">
+    <div class="hero-badge"><div class="pulse-dot"></div>LightGBM · SHAP · 7M Records</div>
+    <h1>Travel with <span class="grad">Foresight.</span></h1>
+    <p class="hero-sub">Aerosight analyses 7 million flight records and real-time route patterns to forecast your delay risk before you reach the gate.</p>
+
+    <div class="search-card">
+      <!-- Row 1: Airline | Route -->
+      <div class="row1">
+        <div>
+          <div class="fl">Airline</div>
+          <select class="fi" id="p-airline" onchange="pLoadHours()">
+            <option value="">Loading...</option>
+          </select>
+          <div class="ferr" id="ferr-p-airline">⚠ Please select an airline</div>
+        </div>
+        <div>
+          <div class="fl">Route</div>
+          <div class="from-to">
+            <div class="fw">
+              <span class="fi-icon">&#9992;</span>
+              <select class="fi" id="p-from" onchange="pOriginChange()">
+                <option value="">Loading...</option>
+              </select>
+              <div class="ferr" id="ferr-p-from">⚠ Please select origin</div>
+            </div>
+            <div class="swap-btn" onclick="pSwap()" title="Swap">&#8644;</div>
+            <div class="fw">
+              <span class="fi-icon">&#8594;</span>
+              <select class="fi" id="p-to" onchange="pLoadHours()">
+                <option value="">Select origin first</option>
+              </select>
+              <div class="ferr" id="ferr-p-to">⚠ Please select destination</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Row 2: Date | Time | Button -->
+      <div class="row2">
+        <div>
+          <div class="fl">Departure Date</div>
+          <div class="date-wrap" id="p-date-wrap">
+            <span class="date-icon">&#128197;</span>
+            <div class="date-btn empty" id="p-date-btn" onclick="toggleCal('p')">Select date</div>
+            <div class="cal-dropdown" id="p-cal"></div>
+          </div>
+          <div class="ferr" id="ferr-p-date">⚠ Please select a date</div>
+        </div>
+        <div>
+          <div class="fl">Departure Time</div>
+          <select class="fi" id="p-time">
+            <option value="">Select route first</option>
+          </select>
+          <div class="ferr" id="ferr-p-time">⚠ Please select a time</div>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="cta-btn" id="p-btn" onclick="pRun()">
+            <div class="cta-inner">
+              <div class="spinner" id="p-spin"></div>
+              <span id="p-btxt">Predict Delay</span>
+            </div>
+          </button>
+        </div>
+      </div>
+      <!-- Error -->
+      <div class="err-banner" id="p-err">
+        <div class="err-icon">!</div>
+        <span id="p-err-msg">Please fill all the fields.</span>
+      </div>
+      <!-- Hints -->
+      <div class="hint-row">
+        <span style="font-size:.71rem;color:var(--dim)">Try:</span>
+        <span class="ht" onclick="pSet('ATL','MIA')">ATL &rarr; MIA</span>
+        <span class="ht" onclick="pSet('ORD','LAX')">ORD &rarr; LAX</span>
+        <span class="ht" onclick="pSet('JFK','ORD')">JFK &rarr; ORD</span>
+        <span class="ht" onclick="pSet('DFW','DEN')">DFW &rarr; DEN</span>
+        <span class="ht" onclick="pSet('LAX','SEA')">LAX &rarr; SEA</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="ss">
+        <div class="st">Region Data</div>
+        <div class="ri active"><div class="rdot"></div>United States<span class="rb">Live</span></div>
+        <div class="ri" style="opacity:.4;pointer-events:none"><div class="rdot"></div>Europe<span class="rb soon">Soon</span></div>
+        <div class="ri" style="opacity:.4;pointer-events:none"><div class="rdot"></div>Middle East<span class="rb soon">Soon</span></div>
+        <div class="ri" style="opacity:.4;pointer-events:none"><div class="rdot"></div>Asia<span class="rb soon">Soon</span></div>
+      </div>
+      <div class="ss">
+        <div class="st">2024 Snapshot</div>
+        <div class="sg">
+          <div class="ss2"><div class="sv tc">79.4%</div><div class="sk">On-Time Rate</div></div>
+          <div class="ss2"><div class="sv wc">21 min</div><div class="sk">Avg Delay</div></div>
+          <div class="ss2"><div class="sv dc">6.9M</div><div class="sk">Flights</div></div>
+          <div class="ss2"><div class="sv bc">18</div><div class="sk">Airlines</div></div>
+        </div>
+      </div>
+      <div class="ss">
+        <div class="st">Model Info</div>
+        <div style="font-size:.77rem;color:var(--muted);display:flex;flex-direction:column;gap:.5rem">
+          <div style="display:flex;justify-content:space-between"><span>Algorithm</span><span style="color:var(--text)">LightGBM</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Accuracy</span><span class="tc">72.2%</span></div>
+          <div style="display:flex;justify-content:space-between"><span>AUC</span><span class="tc">0.7247</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Features</span><span style="color:var(--text)">14</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Records</span><span style="color:var(--text)">6.9M</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Tuning</span><span style="color:var(--text)">Optuna</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Explainability</span><span class="tc">SHAP</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <main id="p-main">
+      <!-- Empty -->
+      <div class="empty-state" id="p-empty">
+        <div class="ei" style="font-size:22px">&#128225;</div>
+        <div style="font-size:1rem;font-weight:600;margin-bottom:.5rem">No analysis yet</div>
+        <div style="font-size:.83rem;color:var(--muted);max-width:300px;line-height:1.65">Select your airline, route, date and time above, then click Predict Delay.</div>
+      </div>
+      <!-- Analysing -->
+      <div class="ana-panel" id="p-ana">
+        <div class="a-orb" style="font-size:22px">&#9889;</div>
+        <div style="font-size:1.05rem;font-weight:700">Running Analysis</div>
+        <div style="font-size:.8rem;color:var(--muted)">Processing 6.9M historical flight records</div>
+        <div class="a-steps">
+          <div class="a-step" id="ps1"><div class="a-dot"></div><span id="ps1t">Fetching route history</span></div>
+          <div class="a-step" id="ps2"><div class="a-dot"></div>Pulling live weather data</div>
+          <div class="a-step" id="ps3"><div class="a-dot"></div>Running LightGBM inference</div>
+          <div class="a-step" id="ps4"><div class="a-dot"></div>Computing SHAP feature importance</div>
+          <div class="a-step" id="ps5"><div class="a-dot"></div>Generating recommendations</div>
+        </div>
+      </div>
+      <!-- Result -->
+      <div class="result-wrap" id="p-res" style="display:none">
+        <div class="rc">
+          <div class="risk-block">
+            <div>
+              <div class="rl">Delay Risk Assessment</div>
+              <div class="rh" id="p-rh">-</div>
+              <div class="rsub" id="p-rsub">-</div>
+              <div class="pills" id="p-pills"></div>
+            </div>
+            <div class="gauge-wrap">
+              <svg width="160" height="100" viewBox="0 0 160 100" style="display:block;margin:0 auto .4rem">
+                <defs>
+                  <linearGradient id="gg"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+                  <linearGradient id="gw"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
+                </defs>
+                <path d="M20,90 A70,70 0 0,1 140,90" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+                <path id="p-garc" d="M20,90 A70,70 0 0,1 140,90" fill="none" stroke="url(#gg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)"/>
+                <text x="14" y="100" fill="rgba(255,255,255,0.2)" font-size="9" font-family="DM Mono">0</text>
+                <text x="80" y="22" fill="rgba(255,255,255,0.2)" font-size="9" font-family="DM Mono" text-anchor="middle">50</text>
+                <text x="147" y="100" fill="rgba(255,255,255,0.2)" font-size="9" font-family="DM Mono" text-anchor="end">100</text>
+              </svg>
+              <div class="g-pct" id="p-gp">-</div>
+              <div class="g-lbl" id="p-gl">DELAY PROBABILITY</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="ic"><div class="icl">Flight</div><div class="icv" id="p-ic1">-</div><div class="ics" id="p-ic1s">-</div></div>
+            <div class="ic"><div class="icl">Departs</div><div class="icv" id="p-ic2">-</div><div class="ics" id="p-ic2s">-</div></div>
+            <div class="ic"><div class="icl">Avg Delay (Route)</div><div class="icv" id="p-ic3" style="color:#f59e0b">-</div><div class="ics">Historical avg</div></div>
+            <div class="ic"><div class="icl">Confidence</div><div class="icv" id="p-ic4" style="color:#2dd4bf">-</div><div class="ics" id="p-ic4s">-</div></div>
+          </div>
+        </div>
+        <div class="bot-grid">
+          <div class="rc" style="padding:1.4rem">
+            <div style="font-size:.84rem;font-weight:600;margin-bottom:1.1rem">Route Preview</div>
+            <div class="rvis">
+              <div class="ra"><div class="racode" id="p-fc">-</div><div class="raname" id="p-fn">-</div></div>
+              <div class="rm">
+                <div class="rline"><div class="rp-plane">&#9992;</div></div>
+                <div class="rdur" id="p-dur">-</div>
+              </div>
+              <div class="ra"><div class="racode" id="p-tc">-</div><div class="raname" id="p-tn">-</div></div>
+            </div>
+            <div class="rt-badges">
+              <div class="rt-b"><div class="rt-bv" id="p-rt1">-</div><div class="rt-bk">Departs</div></div>
+              <div class="rt-b"><div class="rt-bv" id="p-rt2">-</div><div class="rt-bk">Distance</div></div>
+              <div class="rt-b"><div class="rt-bv" id="p-rt3" style="color:#f59e0b">-</div><div class="rt-bk">Slot</div></div>
+            </div>
+          </div>
+          <div class="rc" style="padding:1.4rem">
+            <div style="font-size:.84rem;font-weight:600;margin-bottom:1.1rem;display:flex;align-items:center;gap:8px">Why this prediction? <span class="ftag">SHAP Values</span></div>
+            <div class="flist" id="p-flist"></div>
+          </div>
+        </div>
+        <div class="rc" style="padding:1.4rem">
+          <div style="font-size:.84rem;font-weight:600;margin-bottom:1.1rem;display:flex;align-items:center;gap:8px">
+            Route Performance Analysis <span class="ftag">2024 Data</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem">
+            <div>
+              <div style="font-size:.71rem;color:var(--muted);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Delay Rate by Hour of Day</div>
+              <div style="position:relative;height:170px"><canvas id="p-hour-chart"></canvas></div>
+            </div>
+            <div>
+              <div style="font-size:.71rem;color:var(--muted);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Your Flight vs Network Average</div>
+              <div style="position:relative;height:170px"><canvas id="p-risk-chart"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="rc" style="padding:1.4rem">
+          <div style="font-size:.84rem;font-weight:600;margin-bottom:1rem">Operational Recommendations</div>
+          <div id="p-recs"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ====== PAGE 2: ACTION PLAN ====== -->
+<div id="page-prescriptive" class="page">
+  <div class="page-pad">
+    <div class="sect-head">
+      <h2>Turn Risk Into <span class="grad">Action.</span></h2>
+      <p>Select a flight and receive a full operational action plan with cost impact estimates.</p>
+    </div>
+    <div class="input-card">
+      <div class="row1">
+        <div>
+          <div class="fl">Airline</div>
+          <select class="fi" id="pe-airline" onchange="peLoadHours()"><option value="">Loading...</option></select>
+        </div>
+        <div>
+          <div class="fl">Route</div>
+          <div class="from-to">
+            <div class="fw"><span class="fi-icon">&#9992;</span><select class="fi" id="pe-from" onchange="peOriginChange()"><option value="">Loading...</option></select></div>
+            <div class="swap-btn" onclick="peSwap()">&#8644;</div>
+            <div class="fw"><span class="fi-icon">&#8594;</span><select class="fi" id="pe-to" onchange="peLoadHours()"><option value="">Select origin first</option></select></div>
+          </div>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <div class="fl">Departure Date</div>
+          <div class="date-wrap" id="pe-date-wrap">
+            <span class="date-icon">&#128197;</span>
+            <div class="date-btn empty" id="pe-date-btn" onclick="toggleCal('pe')">Select date</div>
+            <div class="cal-dropdown" id="pe-cal"></div>
+          </div>
+        </div>
+        <div>
+          <div class="fl">Departure Time</div>
+          <select class="fi" id="pe-time"><option value="">Select route first</option></select>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="cta-btn" id="pe-btn" onclick="peRun()">
+            <div class="cta-inner"><div class="spinner" id="pe-spin"></div><span id="pe-btxt">Generate Action Plan</span></div>
+          </button>
+        </div>
+      </div>
+      <div class="err-banner" id="pe-err">
+        <div class="err-icon">!</div>
+        <span id="pe-err-msg">Please fill all the fields.</span>
+      </div>
+    </div>
+
+    <div class="ana-panel" id="pe-ana" style="margin-bottom:2rem">
+      <div class="a-orb" style="font-size:22px">&#9881;</div>
+      <div style="font-size:1.05rem;font-weight:700">Generating Action Plan</div>
+      <div style="font-size:.8rem;color:var(--muted)">Analysing risk and building recommendations</div>
+    </div>
+
+    <div class="result-wrap" id="pe-res" style="display:none">
+      <div class="rc" style="margin-bottom:0">
+        <div class="risk-block">
+          <div>
+            <div class="rl">Prescriptive Action Plan</div>
+            <div class="rh" id="pe-rh">-</div>
+            <div class="rsub" id="pe-rsub">-</div>
+            <div class="pills" id="pe-pills"></div>
+          </div>
+          <div class="gauge-wrap">
+            <svg width="160" height="100" viewBox="0 0 160 100" style="display:block;margin:0 auto .4rem">
+              <defs>
+                <linearGradient id="gg2"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+                <linearGradient id="gw2"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
+              </defs>
+              <path d="M20,90 A70,70 0 0,1 140,90" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="10" stroke-linecap="round"/>
+              <path id="pe-garc" d="M20,90 A70,70 0 0,1 140,90" fill="none" stroke="url(#gg2)" stroke-width="10" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)"/>
+            </svg>
+            <div class="g-pct" id="pe-gp">-</div>
+            <div class="g-lbl" id="pe-gl">DELAY PROBABILITY</div>
+          </div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="scl">Passengers at Risk</div><div class="scv" id="pe-pax" style="color:#e2e8f0">-</div><div class="scs">Estimated for route</div></div>
+        <div class="stat-card"><div class="scl">Connecting Flights</div><div class="scv" id="pe-conn" style="color:#f59e0b">-</div><div class="scs">Cascade risk at dest</div></div>
+        <div class="stat-card"><div class="scl">Est. Cost (No Action)</div><div class="scv" id="pe-cost" style="color:#ef4444">-</div><div class="scs">Based on expected delay</div></div>
+        <div class="stat-card"><div class="scl">Potential Savings</div><div class="scv" id="pe-save" style="color:#2dd4bf">-</div><div class="scs">With early intervention</div></div>
+      </div>
+      <!-- Risk Factors full width -->
+      <div class="rc" style="padding:1.4rem;margin-bottom:0">
+        <div class="stit">Risk Factors <span class="ftag">SHAP Values</span></div>
+        <div class="flist" id="pe-flist" style="margin-top:.75rem"></div>
+      </div>
+
+      <!-- ── Airline Operations Toggle (Tab 2) ─────────── -->
+      <div id="pe-ops-section">
+        <div class="ops-bar" id="pe-ops-bar" onclick="peOpsToggle()">
+          <div class="ops-left">
+            <div class="ops-ico" id="pe-ops-ico">✈</div>
+            <div>
+              <div class="ops-lbl">Airline Operations View</div>
+              <div class="ops-sublbl">B2B operational alert — authorised personnel only</div>
+            </div>
+          </div>
+          <div class="ops-right">
+            <span class="ops-badge" id="pe-ops-badge">MODERATE RISK</span>
+            <span class="ops-chev" id="pe-ops-chev">▾</span>
+          </div>
+        </div>
+        <div class="ops-drop" id="pe-ops-drop">
+          <div class="ops-inner">
+
+            <div class="ops-sev mod" id="pe-ops-sev">
+              <div class="ops-sev-dot"></div>
+              <span class="ops-sev-lbl" id="pe-ops-sev-lbl">Moderate Risk — ADVISORY</span>
+              <span class="ops-sev-code" id="pe-ops-sev-code">OPS-ADV-02</span>
+            </div>
+
+            <!-- MODERATE grid -->
+            <div class="ops-grid" id="pe-ops-mod-grid">
+              <div class="ops-alert">
+                <div class="ops-ah amber"><div class="ops-ah-dot"></div>Ground Ops — Pushback</div>
+                <div class="ops-ab">Probabilistic model indicates <strong>15–30 min pushback delay</strong> for this departure slot. Pre-notify ramp crew and tow team. Recommend <strong>T-45 min stand readiness</strong> vs standard T-30. No gate reassignment required at this stage.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah blue"><div class="ops-ah-dot"></div>Turnaround Planning</div>
+                <div class="ops-ab">Review downstream gate availability for inbound aircraft. <strong>Buffer gate hold</strong> recommended if slot congestion index exceeds threshold at arrival hub. Coordinate with slot coordinator for <strong>revised CTOT window</strong>.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah teal"><div class="ops-ah-dot"></div>Catering &amp; Fueling</div>
+                <div class="ops-ab">No immediate action required. Place catering team on <strong>30-min standby notification</strong>. Fueling uplift to proceed on original schedule — reassess if delay confirmed operationally at <strong>T-60 min</strong>.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah amber"><div class="ops-ah-dot"></div>Crew Duty Time</div>
+                <div class="ops-ab">Monitor FDP (Flight Duty Period) limits. A <strong>30-min delay</strong> does not trigger crew rest violation on this rotation. Flag to crew scheduling if ground time exceeds <strong>45 min</strong> — duty extension approval may be required.</div>
+              </div>
+            </div>
+
+            <!-- HIGH RISK grid -->
+            <div class="ops-grid hidden" id="pe-ops-high-grid">
+              <div class="ops-alert">
+                <div class="ops-ah red"><div class="ops-ah-dot"></div>Ground Ops — Critical</div>
+                <div class="ops-ab"><strong>Initiate IROP protocol immediately.</strong> Alert ramp supervisor and station manager. Gate reassignment assessment required. Coordinate with ATC for revised <strong>EOBT (Estimated Off-Block Time)</strong>.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah red"><div class="ops-ah-dot"></div>Passenger Rebooking</div>
+                <div class="ops-ab"><strong>Proactive rebooking review mandatory</strong> for all passengers with onward connections under 90 min at destination. Minimum 3 alternative routing options. Initiate automated rebooking for <strong>MCT-critical pax</strong> now.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah red"><div class="ops-ah-dot"></div>Crew FDP — Timeout Risk</div>
+                <div class="ops-ab"><strong>Crew timeout risk elevated.</strong> Initiate standby crew activation immediately. Contact crew scheduling for reserve positioning. FDP breach projected if block delay exceeds <strong>52 min</strong> on this rotation.</div>
+              </div>
+              <div class="ops-alert">
+                <div class="ops-ah red"><div class="ops-ah-dot"></div>Cascading Delay Risk</div>
+                <div class="ops-ab">Aircraft rotation analysis indicates <strong>2 downstream flights at risk</strong> from this delay propagation. Notify OCC. Assess tail-swap or slot-swap options for <strong>subsequent rotation</strong>.</div>
+              </div>
+            </div>
+
+            <!-- MODERATE actions -->
+            <div class="ops-actions" id="pe-ops-mod-actions">
+              <div class="ops-at">Recommended Action Sequence</div>
+              <div class="ops-alist">
+                <div class="ops-aitem"><div class="ops-anum amber">01</div><span><strong>T-45 min:</strong> Pre-notify ramp crew and tow team of probable late pushback window.</span></div>
+                <div class="ops-aitem"><div class="ops-anum amber">02</div><span><strong>T-40 min:</strong> Verify gate availability for downstream rotation. Hold buffer gate if possible.</span></div>
+                <div class="ops-aitem"><div class="ops-anum amber">03</div><span><strong>T-30 min:</strong> Reassess operationally — if delay confirmed, notify catering and revise fueling uplift schedule.</span></div>
+                <div class="ops-aitem"><div class="ops-anum amber">04</div><span><strong>T-20 min:</strong> Check crew FDP status. Escalate to crew scheduling if breach threshold is within 45 min range.</span></div>
+              </div>
+            </div>
+
+            <!-- HIGH RISK actions -->
+            <div class="ops-actions hidden" id="pe-ops-high-actions">
+              <div class="ops-at">Mandatory Action Sequence — IROP Active</div>
+              <div class="ops-alist">
+                <div class="ops-aitem"><div class="ops-anum red">01</div><span><strong>Immediate:</strong> Activate IROP protocol. Notify station manager, OCC, and ramp supervisor concurrently.</span></div>
+                <div class="ops-aitem"><div class="ops-anum red">02</div><span><strong>Immediate:</strong> Initiate proactive rebooking for all MCT-critical connecting passengers. Minimum 3 routing options required.</span></div>
+                <div class="ops-aitem"><div class="ops-anum red">03</div><span><strong>T-60 min:</strong> Contact crew scheduling — activate standby reserve crew. Assess tail-swap feasibility with OCC.</span></div>
+                <div class="ops-aitem"><div class="ops-anum red">04</div><span><strong>T-45 min:</strong> Coordinate revised EOBT with ATC slot coordinator. Notify downstream stations of cascading delay risk.</span></div>
+                <div class="ops-aitem"><div class="ops-anum red">05</div><span><strong>T-30 min:</strong> Issue passenger delay notification via all channels. Brief cabin crew on revised departure window.</span></div>
+              </div>
+            </div>
+
+            <div class="ops-foot">
+              <span id="pe-ops-ts" style="font-family:'DM Mono',monospace">Generated: —</span>
+              <span>Model: LightGBM · SHAP Explainability Active</span>
+              <span class="ops-ref" id="pe-ops-ref">REF-ADV-001</span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE 3: NETWORK MAP ====== -->
+<div id="page-map" class="page">
+  <div class="map-hdr">
+    <div>
+      <h2 style="font-size:1.8rem;font-weight:900;letter-spacing:-.03em;margin-bottom:.4rem">US Airport <span class="grad">Delay Risk Map</span></h2>
+      <p style="font-size:.88rem;color:var(--muted)">Bubble size = flight volume · Color = delay risk level · Hover for details</p>
+    </div>
+    <div class="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#2dd4bf"></div>Low Risk (&lt;20%)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Moderate (20-30%)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>High Risk (&gt;30%)</div>
+    </div>
+  </div>
+  <div class="map-wrap"><div id="map"></div></div>
+  <div class="map-stats">
+    <div class="kpi-card"><div class="kl">Airports Tracked</div><div class="kv" style="color:#e2e8f0" id="map-airports">-</div><div class="ks">US domestic network</div></div>
+    <div class="kpi-card"><div class="kl">Avg Network Delay</div><div class="kv" style="color:#f59e0b" id="map-avg-delay">-</div><div class="ks">2024 annual average</div></div>
+    <div class="kpi-card"><div class="kl">Best On-Time Airport</div><div class="kv" style="color:#2dd4bf" id="map-best">-</div><div class="ks" id="map-best-rate">-</div></div>
+    <div class="kpi-card"><div class="kl">Highest Delay Airport</div><div class="kv" style="color:#ef4444" id="map-worst">-</div><div class="ks" id="map-worst-rate">-</div></div>
+  </div>
+</div>
+
+<!-- ====== PAGE 4: DASHBOARD ====== -->
+<div id="page-dashboard" class="page">
+  <div class="page-pad">
+    <div class="sect-head">
+      <h2>Network <span class="grad">Operations Dashboard</span></h2>
+      <p>2024 US domestic flight performance — 6.9M flights across 18 airlines</p>
+    </div>
+    <div class="kpi-row" id="dash-kpis">
+      <div class="kpi-card"><div class="kl">Airlines Tracked</div><div class="kv" style="color:#e2e8f0" id="d-airlines">-</div><div class="ks">US domestic carriers</div></div>
+      <div class="kpi-card"><div class="kl">Network Delay Rate</div><div class="kv" style="color:#f59e0b" id="d-delay-rate">-</div><div class="ks">2024 annual average</div></div>
+      <div class="kpi-card"><div class="kl">Best On-Time Carrier</div><div class="kv" style="color:#2dd4bf" id="d-best">-</div><div class="ks" id="d-best-name">-</div></div>
+      <div class="kpi-card"><div class="kl">Most Delayed Carrier</div><div class="kv" style="color:#ef4444" id="d-worst">-</div><div class="ks" id="d-worst-name">-</div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div class="ct">Delay Rate by Airline</div><div class="chart-wrap"><canvas id="airlineChart"></canvas></div></div>
+      <div class="chart-card"><div class="ct">Delay Rate by Hour of Day</div><div class="chart-wrap"><canvas id="hourChart"></canvas></div></div>
+      <div class="chart-card full"><div class="ct">Monthly Delay Rate vs Weather</div><div class="chart-wrap tall"><canvas id="monthChart"></canvas></div></div>
+      <div class="chart-card"><div class="ct">Delay Rate by Weather Condition</div><div class="chart-wrap"><canvas id="weatherChart"></canvas></div></div>
+      <div class="chart-card"><div class="ct">Top 10 Highest-Risk Routes</div><div class="chart-wrap"><canvas id="routeChart"></canvas></div></div>
+    </div>
+    <div class="chart-card">
+      <div class="ct">Airline Performance Summary — 2024</div>
+      <table id="airline-table">
+        <thead><tr><th>Airline</th><th>Code</th><th>Delay Rate</th><th>Avg Delay</th><th>Flights</th><th>Risk</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE 5: MODEL ====== -->
+<div id="page-model" class="page">
+  <div class="page-pad">
+    <div class="sect-head">
+      <h2>Model <span class="grad">Performance</span></h2>
+      <p>LightGBM with Optuna hyperparameter tuning · SHAP explainability · 6.9M training records</p>
+    </div>
+    <div class="kpi5" id="model-kpis">
+      <div class="kpi-card"><div class="kl">Accuracy</div><div class="kv" style="color:#2dd4bf" id="m-acc">-</div><div class="ks">Real-world distribution</div></div>
+      <div class="kpi-card"><div class="kl">AUC Score</div><div class="kv" style="color:#3b82f6" id="m-auc">-</div><div class="ks">ROC-AUC</div></div>
+      <div class="kpi-card"><div class="kl">F1 Score</div><div class="kv" style="color:#a78bfa" id="m-f1">-</div><div class="ks">Balanced F1</div></div>
+      <div class="kpi-card"><div class="kl">Precision</div><div class="kv" style="color:#f59e0b" id="m-prec">-</div><div class="ks">Positive predictive value</div></div>
+      <div class="kpi-card"><div class="kl">Recall</div><div class="kv" style="color:#60a5fa" id="m-rec">-</div><div class="ks">Delays caught</div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><div class="ct">Model Comparison — AUC Score</div><div class="chart-wrap"><canvas id="modelChart"></canvas></div></div>
+      <div class="chart-card"><div class="ct">Feature Importance (SHAP)</div><div class="chart-wrap"><canvas id="featChart"></canvas></div></div>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="ict">Why LightGBM?</div>
+        <div class="irow"><span class="lbl">Algorithm</span><span class="val">LightGBM</span></div>
+        <div class="irow"><span class="lbl">Tuning</span><span class="val" id="m-tuning">Optuna 50 trials</span></div>
+        <div class="irow"><span class="lbl">Imbalance fix</span><span class="val">scale_pos_weight</span></div>
+        <div class="irow"><span class="lbl">Explainability</span><span class="val" style="color:var(--teal)">SHAP TreeExplainer</span></div>
+        <div class="irow"><span class="lbl">vs Random Forest</span><span class="val">10x faster</span></div>
+      </div>
+      <div class="info-card">
+        <div class="ict">Dataset and Training</div>
+        <div class="irow"><span class="lbl">Total records</span><span class="val" id="m-records">6,964,246</span></div>
+        <div class="irow"><span class="lbl">Training split</span><span class="val">80%</span></div>
+        <div class="irow"><span class="lbl">Balance method</span><span class="val">50/50 resample</span></div>
+        <div class="irow"><span class="lbl">FAA delay threshold</span><span class="val">15+ min</span></div>
+        <div class="irow"><span class="lbl">Weather features</span><span class="val">4 (Open-Meteo)</span></div>
+      </div>
+      <div class="info-card">
+        <div class="ict">Risk Thresholds</div>
+        <div class="irow"><span class="lbl" style="color:#2dd4bf">Low Risk</span><span class="val">Below 25%</span></div>
+        <div class="irow"><span class="lbl" style="color:#f59e0b">Moderate</span><span class="val">25% to 35%</span></div>
+        <div class="irow"><span class="lbl" style="color:#ef4444">High Risk</span><span class="val">Above 35%</span></div>
+        <div class="irow"><span class="lbl">Decision threshold</span><span class="val" id="m-thresh">0.70</span></div>
+        <div class="irow"><span class="lbl">Class ratio</span><span class="val">20.6% delayed</span></div>
+      </div>
+    </div>
+    <div class="chart-card" style="margin-bottom:1.2rem">
+      <div class="ct">All Models Evaluated</div>
+      <table>
+        <thead><tr><th>Model</th><th>Accuracy</th><th>AUC</th><th>F1</th><th>Precision</th><th>Recall</th><th>Status</th></tr></thead>
+        <tbody id="model-table"></tbody>
+      </table>
+    </div>
+    <div class="info-card">
+      <div class="ct" style="margin-bottom:1rem;font-size:.9rem;font-weight:600">Feature Importance - Global SHAP</div>
+      <div id="feat-bars"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>2025 Aerosight Intelligence - LightGBM · SHAP · Open-Meteo · 6.9M flights</div>
+  <div style="display:flex;gap:1.5rem">
+    <span style="cursor:pointer;color:var(--muted)" onclick="go('model')">Model</span>
+    <span style="color:var(--muted)">Docs</span>
+  </div>
+</footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Constants ─────────────────────────────────────────────
+const API = 'https://infinitefreame-aerosight-api.hf.space';
+
+const AN = {
+  'AA':'American Airlines','DL':'Delta Air Lines','UA':'United Airlines',
+  'WN':'Southwest Airlines','B6':'JetBlue Airways','AS':'Alaska Airlines',
+  'NK':'Spirit Airlines','F9':'Frontier Airlines','G4':'Allegiant Air',
+  'HA':'Hawaiian Airlines','MQ':'Envoy Air','OO':'SkyWest Airlines',
+  '9E':'Endeavor Air','YX':'Republic Airways','OH':'PSA Airlines',
+  'YV':'Mesa Airlines','QX':'Horizon Air','CP':'Compass Airlines'
+};
+const APT = {
+  'ATL':'Hartsfield-Jackson Atlanta','ORD':"Chicago O'Hare",'LAX':'Los Angeles Intl',
+  'DFW':'Dallas Fort Worth','DEN':'Denver Intl','JFK':'John F. Kennedy',
+  'SFO':'San Francisco Intl','SEA':'Seattle-Tacoma','LAS':'Harry Reid Las Vegas',
+  'MCO':'Orlando Intl','MIA':'Miami Intl','PHX':'Phoenix Sky Harbor',
+  'EWR':'Newark Liberty','BOS':'Logan Boston','MSP':'Minneapolis-St. Paul',
+  'DTW':'Detroit Metro','CLT':'Charlotte Douglas','IAH':'Houston Bush',
+  'SLC':'Salt Lake City','BWI':'Baltimore-Washington'
+};
+const DAY_NAMES = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const MONTH_NAMES = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+const BC = ['b0','b1','b2','b3','b4'];
+const HUB_CONN = {'ATL':12,'ORD':10,'DFW':10,'DEN':9,'LAX':8,'CLT':8,'MIA':7,'LAS':6,'PHX':6,'MCO':5,'SEA':5,'EWR':5,'JFK':5,'BOS':4,'MSP':4,'DTW':4,'SLC':4,'IAH':4};
+const REGIONAL = ['9E','YX','OH','YV','QX','CP','MQ'];
+
+let mapInit=false, dashInit=false, perfInit=false, peInit=false;
+
+// ── Tab switching ─────────────────────────────────────────
+function go(tab) {
+  // Hide all pages with inline style for reliability
+  document.querySelectorAll('.page').forEach(p => { p.style.display = 'none'; p.classList.remove('active'); });
+  const pg = document.getElementById('page-' + tab);
+  pg.style.display = 'block';
+  pg.classList.add('active');
+  // Nav highlight
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const map = {predict:0, prescriptive:1, map:2, dashboard:3, model:4};
+  document.querySelectorAll('.nav-btn')[map[tab]].classList.add('active');
+  // Lazy inits
+  if (tab === 'map' && !mapInit) { mapInit = true; initMap(); }
+  if (tab === 'dashboard' && !dashInit) { dashInit = true; initDash(); }
+  if (tab === 'model' && !perfInit) { perfInit = true; initPerf(); }
+  if (tab === 'prescriptive' && !peInit) { peInit = true; peInitFn(); }
+  document.documentElement.scrollTop = 0;
+}
+
+// ── Calendar ──────────────────────────────────────────────
+const calState = {};
+function makeCal(prefix) {
+  const now = new Date();
+  calState[prefix] = { yr: now.getFullYear(), mo: now.getMonth(), sel: null };
+}
+function toggleCal(prefix) {
+  const el = document.getElementById(prefix + '-cal');
+  const isOpen = el.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.cal-dropdown').forEach(c => c.classList.remove('open'));
+  if (!isOpen) {
+    renderCal(prefix);
+    el.classList.add('open');
+    // Check if result visible — flip upward
+    const resEl = document.getElementById(prefix + '-res');
+    const hasRes = resEl && (resEl.style.display === 'flex' || resEl.classList.contains('show'));
+    if (hasRes) el.classList.add('flip'); else el.classList.remove('flip');
+    setTimeout(() => document.addEventListener('click', function outsideCal(e) {
+      if (!document.getElementById(prefix + '-date-wrap').contains(e.target)) {
+        el.classList.remove('open');
+        document.removeEventListener('click', outsideCal);
+      }
+    }), 50);
+  }
+}
+function renderCal(prefix) {
+  const s = calState[prefix];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const days = ['M','T','W','T','F','S','S'];
+  const first = new Date(s.yr, s.mo, 1);
+  const last = new Date(s.yr, s.mo + 1, 0);
+  let sd = first.getDay(); if (sd === 0) sd = 7; sd--;
+  const now = new Date();
+  let h = `<div class="cal-hdr">
+    <div class="cal-nav-btn" onclick="calPrev('${prefix}')">&#8249;</div>
+    <div class="cal-title">${months[s.mo]} ${s.yr}</div>
+    <div class="cal-nav-btn" onclick="calNext('${prefix}')">&#8250;</div>
+  </div><div class="cal-grid">`;
+  days.forEach(d => h += `<div class="cal-dh">${d}</div>`);
+  const prevLast = new Date(s.yr, s.mo, 0).getDate();
+  for (let i = sd - 1; i >= 0; i--) h += `<div class="cal-d other">${prevLast - i}</div>`;
+  for (let d = 1; d <= last.getDate(); d++) {
+    const isToday = d===now.getDate()&&s.mo===now.getMonth()&&s.yr===now.getFullYear();
+    const isSel = s.sel&&d===s.sel.getDate()&&s.mo===s.sel.getMonth()&&s.yr===s.sel.getFullYear();
+    h += `<div class="cal-d${isToday?' today':''}${isSel?' sel':''}" onclick="pickDate('${prefix}',${d})">${d}</div>`;
+  }
+  const total = Math.ceil((sd + last.getDate()) / 7) * 7;
+  for (let i = sd + last.getDate(), nx = 1; i < total; i++, nx++) h += `<div class="cal-d other">${nx}</div>`;
+  h += '</div>';
+  document.getElementById(prefix + '-cal').innerHTML = h;
+}
+function calPrev(prefix) { const s=calState[prefix]; s.mo--; if(s.mo<0){s.mo=11;s.yr--;} renderCal(prefix); }
+function calNext(prefix) { const s=calState[prefix]; s.mo++; if(s.mo>11){s.mo=0;s.yr++;} renderCal(prefix); }
+function pickDate(prefix, d) {
+  const s = calState[prefix];
+  s.sel = new Date(s.yr, s.mo, d);
+  const dd = String(d).padStart(2,'0');
+  const mm = String(s.mo + 1).padStart(2,'0');
+  const btn = document.getElementById(prefix + '-date-btn');
+  btn.textContent = `${dd}/${mm}/${s.yr}`;
+  btn.classList.remove('empty', 'err');
+  document.getElementById(prefix + '-cal').classList.remove('open');
+}
+function getDateSel(prefix) { return calState[prefix]?.sel || null; }
+
+// ── Helpers ───────────────────────────────────────────────
+function fmtTime(h) {
+  if (h === 0) return '12:00 AM';
+  if (h < 12) return `${h}:00 AM`;
+  if (h === 12) return '12:00 PM';
+  return `${h-12}:00 PM`;
+}
+function getRisk(prob) { return prob >= 0.35 ? 'HIGH' : prob >= 0.25 ? 'MODERATE' : 'LOW'; }
+function riskColor(r) { return r==='HIGH'?'#ef4444':r==='MODERATE'?'#f59e0b':'#2dd4bf'; }
+
+function showErr(prefix, msg) {
+  const b = document.getElementById(prefix + '-err');
+  document.getElementById(prefix + '-err-msg').textContent = msg;
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 5000);
+}
+function hideErr(prefix) { document.getElementById(prefix + '-err').classList.remove('show'); }
+
+function setFiErr(id, isErr) {
+  const el = document.getElementById(id);
+  if (el) { isErr ? el.classList.add('err') : el.classList.remove('err'); }
+  const lbl = document.getElementById('ferr-' + id);
+  if (lbl) { isErr ? lbl.classList.add('show') : lbl.classList.remove('show'); }
+}
+function setDateErr(prefix, isErr) {
+  const el = document.getElementById(prefix + '-date-btn');
+  if (el) { isErr ? el.classList.add('err') : el.classList.remove('err'); }
+  const lbl = document.getElementById('ferr-' + prefix + '-date');
+  if (lbl) { isErr ? lbl.classList.add('show') : lbl.classList.remove('show'); }
+}
+
+// ── API helpers ───────────────────────────────────────────
+async function apiGet(path) {
+  const r = await fetch(API + path);
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function loadAirlines(selId) {
+  try {
+    const d = await apiGet('/airlines');
+    const s = document.getElementById(selId);
+    s.innerHTML = '<option value="">Select airline</option>';
+    d.airlines.forEach(a => { const o=document.createElement('option');o.value=a;o.textContent=`${a} — ${AN[a]||a}`;s.appendChild(o); });
+    s.value = 'AA';
+  } catch(e) { console.error(e); }
+}
+async function loadOrigins(selId) {
+  try {
+    const d = await apiGet('/origins');
+    const s = document.getElementById(selId);
+    s.innerHTML = '<option value="">Select origin</option>';
+    d.origins.forEach(o => { const opt=document.createElement('option');opt.value=o;opt.textContent=`${o} — ${APT[o]||o}`;s.appendChild(opt); });
+    s.value = 'ATL';
+  } catch(e) { console.error(e); }
+}
+async function loadDests(fromId, toId) {
+  const o = document.getElementById(fromId).value;
+  const ts = document.getElementById(toId);
+  if (!o) { ts.innerHTML = '<option value="">Select origin first</option>'; return; }
+  try {
+    const d = await apiGet(`/dests/${o}`);
+    ts.innerHTML = '<option value="">Select destination</option>';
+    d.dests.filter(x => x !== o).forEach(x => { const opt=document.createElement('option');opt.value=x;opt.textContent=`${x} — ${APT[x]||x}`;ts.appendChild(opt); });
+  } catch(e) { console.error(e); }
+}
+async function loadHours(aId, fId, tId, timeId) {
+  const a=document.getElementById(aId).value, o=document.getElementById(fId).value, d=document.getElementById(tId).value;
+  const ts = document.getElementById(timeId);
+  if (!a||!o||!d) { ts.innerHTML = '<option value="">Select route first</option>'; return; }
+  try {
+    const data = await apiGet(`/hours/${a}/${o}/${d}`);
+    ts.innerHTML = '';
+    data.hours.forEach(h => { const opt=document.createElement('option');opt.value=h;opt.textContent=fmtTime(h);ts.appendChild(opt); });
+  } catch(e) { console.error(e); }
+}
+
+// ── Predict Tab ───────────────────────────────────────────
+async function pInit() {
+  makeCal('p');
+  await loadAirlines('p-airline');
+  await loadOrigins('p-from');
+  await loadDests('p-from', 'p-to');
+  document.getElementById('p-to').value = 'MIA';
+  await pLoadHours();
+}
+async function pOriginChange() { await loadDests('p-from','p-to'); await pLoadHours(); }
+async function pLoadHours() { await loadHours('p-airline','p-from','p-to','p-time'); }
+async function pSet(f,t) {
+  document.getElementById('p-from').value = f;
+  await loadDests('p-from','p-to');
+  document.getElementById('p-to').value = t;
+  await pLoadHours();
+}
+async function pSwap() {
+  const f=document.getElementById('p-from'),t=document.getElementById('p-to');
+  const fv=f.value,tv=t.value;
+  f.value=tv; await loadDests('p-from','p-to');
+  document.getElementById('p-to').value=fv; await pLoadHours();
+}
+
+async function pRun() {
+  // Close calendar
+  document.getElementById('p-cal').classList.remove('open');
+  const airline = document.getElementById('p-airline').value;
+  const origin  = document.getElementById('p-from').value;
+  const dest    = document.getElementById('p-to').value;
+  const hour    = parseInt(document.getElementById('p-time').value);
+  const datesel = getDateSel('p');
+
+  // Validate — highlight all missing fields
+  let hasErr = false;
+  setFiErr('p-airline', !airline); if(!airline) hasErr=true;
+  setFiErr('p-from', !origin); if(!origin) hasErr=true;
+  setFiErr('p-to', !dest); if(!dest) hasErr=true;
+  setDateErr('p', !datesel); if(!datesel) hasErr=true;
+  setFiErr('p-time', isNaN(hour)); if(isNaN(hour)) hasErr=true;
+  if (hasErr) { showErr('p','Please fill all the fields.'); return; }
+  hideErr('p');
+
+  const dow = datesel.getDay() || 7;
+  const month = datesel.getMonth() + 1;
+
+  const btn=document.getElementById('p-btn'),sp=document.getElementById('p-spin'),bt=document.getElementById('p-btxt');
+  document.getElementById('p-empty').style.display='none';
+  const rw=document.getElementById('p-res'); rw.style.display='none'; rw.classList.remove('show');
+  document.getElementById('p-ana').classList.add('active');
+  document.getElementById('ps1t').textContent = `Fetching route history — ${origin} to ${dest}`;
+  btn.disabled=true; sp.style.display='block'; bt.textContent='Analysing';
+  [1,2,3,4,5].forEach((n,i)=>setTimeout(()=>document.getElementById('ps'+n).classList.add('vis'),300+i*280));
+
+  try {
+    const data = await apiPost('/predict', {airline,origin,dest,dep_hour:hour,dow,month});
+    await new Promise(r=>setTimeout(r,1800));
+    document.getElementById('p-ana').classList.remove('active');
+    [1,2,3,4,5].forEach(n=>document.getElementById('ps'+n).classList.remove('vis'));
+    pRender(data, airline, origin, dest, hour, dow, month);
+  } catch(e) {
+    await new Promise(r=>setTimeout(r,1800));
+    document.getElementById('p-ana').classList.remove('active');
+    [1,2,3,4,5].forEach(n=>document.getElementById('ps'+n).classList.remove('vis'));
+    document.getElementById('p-empty').style.display='';
+    alert('Prediction failed. Check that the API is awake and try again.');
+  }
+  btn.disabled=false; sp.style.display='none'; bt.textContent='Predict Delay';
+}
+
+function pRender(data, airline, origin, dest, hour, dow, month) {
+  const prob=data.prob, ontime=data.ontime, risk=getRisk(prob);
+  const isH=risk==='HIGH', isM=risk==='MODERATE';
+  const rc = riskColor(risk);
+
+  // Set ops toggle state based on risk
+  opsSet(risk, origin, dest);
+
+  // Gauge shows delay probability
+  const garc = document.getElementById('p-garc');
+  garc.style.strokeDashoffset = '220';
+  garc.setAttribute('stroke', isH?'url(#gw)':'url(#gg)');
+  setTimeout(()=>{ garc.style.strokeDashoffset = 220-(data.delay_pct/100)*220; }, 60);
+
+  document.getElementById('p-gp').textContent = `${data.delay_pct}%`;
+  document.getElementById('p-gp').style.color = rc;
+  document.getElementById('p-gl').textContent = `${risk} RISK`;
+  document.getElementById('p-gl').style.color = rc;
+  document.getElementById('p-rh').textContent = `${ontime}% On-Time Departure`;
+  document.getElementById('p-rsub').textContent = isH
+    ? `High delay risk on ${origin} to ${dest} — immediate action advised.`
+    : isM ? `Moderate conditions on ${origin} to ${dest} — monitor closely.`
+    : `Low-risk conditions on ${origin} to ${dest} — flight likely on schedule.`;
+
+  // Pills
+  const pills = document.getElementById('p-pills'); pills.innerHTML='';
+  [
+    {c:isH?'p-r':isM?'p-y':'p-g', t:isH?'High Risk':isM?'Moderate Risk':'Low Risk'},
+    {c:data.avg_delay>20?'p-r':data.avg_delay>10?'p-y':'p-g', t:`Avg Route Delay: ${data.avg_delay} min`},
+    {c:(hour>=7&&hour<=9)||(hour>=16&&hour<=20)?'p-y':'p-g', t:(hour>=7&&hour<=9)||(hour>=16&&hour<=20)?'Peak Hour Slot':'Off-Peak Slot'}
+  ].forEach(p=>{ const s=document.createElement('span');s.className=`pill ${p.c}`;s.textContent=p.t;pills.appendChild(s); });
+
+  // Info row
+  document.getElementById('p-ic1').textContent=`${origin} to ${dest}`;
+  document.getElementById('p-ic1s').textContent=AN[airline]||airline;
+  document.getElementById('p-ic2').textContent=fmtTime(hour);
+  document.getElementById('p-ic2s').textContent=`${DAY_NAMES[dow]}, ${MONTH_NAMES[month]}`;
+  document.getElementById('p-ic3').textContent=data.avg_delay>0?`${data.avg_delay} min`:'N/A';
+  const conf=data.total_flights>5000?'High':data.total_flights>1000?'Medium':'Low';
+  document.getElementById('p-ic4').textContent=conf;
+  document.getElementById('p-ic4').style.color=conf==='High'?'#2dd4bf':conf==='Medium'?'#f59e0b':'#64748b';
+  document.getElementById('p-ic4s').textContent=`${(data.total_flights||0).toLocaleString()} similar routes`;
+
+  // Route card
+  document.getElementById('p-fc').textContent=origin;
+  document.getElementById('p-fn').textContent=APT[origin]||origin;
+  document.getElementById('p-tc').textContent=dest;
+  document.getElementById('p-tn').textContent=APT[dest]||dest;
+  document.getElementById('p-dur').textContent=data.duration_str||'–';
+  document.getElementById('p-rt1').textContent=fmtTime(hour);
+  document.getElementById('p-rt2').textContent=`${(data.distance||0).toLocaleString()} mi`;
+  document.getElementById('p-rt3').textContent=data.slot_category||'–';
+  const slotC={Morning:'#2dd4bf',Midday:'#3b82f6',Evening:'#f59e0b','Late Eve':'#f59e0b','Red Eye':'#64748b'};
+  document.getElementById('p-rt3').style.color=slotC[data.slot_category]||'#f59e0b';
+
+  // SHAP
+  const fl=document.getElementById('p-flist'); fl.innerHTML='';
+  (data.shap||[]).forEach((item,i)=>{
+    const d=document.createElement('div'); d.className='fitem';
+    d.innerHTML=`<div class="fmeta"><span>${item.label}</span><span class="fpct">${item.pct}%</span></div><div class="bbg"><div class="bf ${BC[i]||'b4'}" id="psb${i}"></div></div>`;
+    fl.appendChild(d);
+    setTimeout(()=>{ const el=document.getElementById('psb'+i); if(el) el.style.width=`${item.pct}%`; }, 100+i*80);
+  });
+
+  // Recommendations
+  const rl=document.getElementById('p-recs'); rl.innerHTML='';
+  (data.recommendations||[]).forEach(r=>{
+    const d=document.createElement('div');
+    const cls=r.type==='danger'?'rd':r.type==='warn'?'rw':'ri-rec';
+    d.className=`rec-item ${cls}`;
+    d.innerHTML=`<span>${r.text}</span>`;
+    rl.appendChild(d);
+  });
+
+
+  // Charts
+  const F2 = {family:"'DM Sans', sans-serif", size:10};
+  // Destroy old chart instances if they exist
+  if(window._pHourChart) { window._pHourChart.destroy(); }
+  if(window._pRiskChart) { window._pRiskChart.destroy(); }
+
+  // Hourly delay rate — highlight current hour
+  const hRates=[8.1,6.2,5.8,5.4,5.9,7.2,9.8,14.3,18.7,16.2,15.4,16.8,17.9,18.3,19.1,20.4,22.8,24.1,25.6,23.9,22.1,19.8,17.2,13.4];
+  const hColors = hRates.map((_,i) => i===hour ? '#3b82f6' : 'rgba(100,116,139,0.35)');
+  window._pHourChart = new Chart(document.getElementById('p-hour-chart'), {
+    type:'bar',
+    data:{
+      labels:Array.from({length:24},(_,i)=>i===0?'12a':i<12?i+'a':i===12?'12p':(i-12)+'p'),
+      datasets:[{data:hRates,backgroundColor:hColors,borderRadius:4,borderSkipped:false}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:800},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% delay rate`}}},
+      scales:{x:{grid:{display:false},ticks:{font:F2,maxRotation:0,autoSkip:true,maxTicksLimit:8}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F2,callback:v=>v+'%'},max:32}}}
+  });
+
+  // Risk comparison bar chart
+  const avgNetDelay = 20.6;
+  const routeDelay = parseFloat(data.delay_pct)||0;
+  const riskC = isH?'#ef4444':isM?'#f59e0b':'#2dd4bf';
+  window._pRiskChart = new Chart(document.getElementById('p-risk-chart'), {
+    type:'bar',
+    data:{
+      labels:['This Flight','Route Avg','Network Avg'],
+      datasets:[{
+        data:[routeDelay, data.avg_delay||0, avgNetDelay],
+        backgroundColor:[riskC, 'rgba(59,130,246,0.6)', 'rgba(100,116,139,0.45)'],
+        borderRadius:8,borderSkipped:false
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:900},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}%`}}},
+      scales:{x:{grid:{display:false},ticks:{font:F2}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F2,callback:v=>v+'%'},max:50}}}
+  });
+
+  // Show
+  const rw=document.getElementById('p-res');
+  rw.style.display='flex';
+  setTimeout(()=>{ rw.classList.add('show'); rw.scrollIntoView({behavior:'smooth',block:'start'}); }, 30);
+}
+
+// ── Prescriptive Tab ──────────────────────────────────────
+async function peInitFn() {
+  makeCal('pe');
+  await loadAirlines('pe-airline');
+  await loadOrigins('pe-from');
+  await loadDests('pe-from','pe-to');
+  document.getElementById('pe-to').value='MIA';
+  await peLoadHours();
+}
+async function peOriginChange() { await loadDests('pe-from','pe-to'); await peLoadHours(); }
+async function peLoadHours() { await loadHours('pe-airline','pe-from','pe-to','pe-time'); }
+async function peSwap() {
+  const f=document.getElementById('pe-from'),t=document.getElementById('pe-to');
+  const fv=f.value,tv=t.value;
+  f.value=tv; await loadDests('pe-from','pe-to');
+  document.getElementById('pe-to').value=fv; await peLoadHours();
+}
+
+async function peRun() {
+  document.getElementById('pe-cal').classList.remove('open');
+  const airline=document.getElementById('pe-airline').value;
+  const origin=document.getElementById('pe-from').value;
+  const dest=document.getElementById('pe-to').value;
+  const hour=parseInt(document.getElementById('pe-time').value);
+  const datesel=getDateSel('pe');
+
+  let hasErr=false;
+  setFiErr('pe-airline',!airline); if(!airline) hasErr=true;
+  setFiErr('pe-from',!origin); if(!origin) hasErr=true;
+  setFiErr('pe-to',!dest); if(!dest) hasErr=true;
+  setDateErr('pe',!datesel); if(!datesel) hasErr=true;
+  setFiErr('pe-time',isNaN(hour)); if(isNaN(hour)) hasErr=true;
+  if (hasErr) { showErr('pe','Please fill all the fields.'); return; }
+  hideErr('pe');
+
+  const dow=datesel.getDay()||7, month=datesel.getMonth()+1;
+  const btn=document.getElementById('pe-btn'),sp=document.getElementById('pe-spin'),bt=document.getElementById('pe-btxt');
+  const rw=document.getElementById('pe-res'); rw.style.display='none'; rw.classList.remove('show');
+  document.getElementById('pe-ana').classList.add('active');
+  btn.disabled=true; sp.style.display='block'; bt.textContent='Analysing';
+  await new Promise(r=>setTimeout(r,400));
+
+  try {
+    const data=await apiPost('/predict',{airline,origin,dest,dep_hour:hour,dow,month});
+    await new Promise(r=>setTimeout(r,1200));
+    document.getElementById('pe-ana').classList.remove('active');
+    peRender(data,airline,origin,dest,hour,dow,month);
+  } catch(e) {
+    console.error('peRun error:', e);
+    document.getElementById('pe-ana').classList.remove('active');
+    alert('Prediction failed. Error: ' + e.message);
+  }
+  btn.disabled=false; sp.style.display='none'; bt.textContent='Generate Action Plan';
+}
+
+function peRender(data,airline,origin,dest,hour,dow,month) {
+  const prob=data.prob,ontime=data.ontime,risk=getRisk(prob);
+  const isH=risk==='HIGH',isM=risk==='MODERATE';
+  const rc=riskColor(risk);
+
+  // Set Tab 2 ops toggle
+  peOpsSet(risk, origin, dest);
+
+  const garc=document.getElementById('pe-garc');
+  garc.style.strokeDashoffset='220';
+  garc.setAttribute('stroke',isH?'url(#gw2)':'url(#gg2)');
+  setTimeout(()=>{ garc.style.strokeDashoffset=220-(data.delay_pct/100)*220; },60);
+  document.getElementById('pe-gp').textContent=`${data.delay_pct}%`;
+  document.getElementById('pe-gp').style.color=rc;
+  document.getElementById('pe-gl').textContent=`${risk} RISK`;
+  document.getElementById('pe-gl').style.color=rc;
+  document.getElementById('pe-rh').textContent=`${ontime}% On-Time Probability`;
+  document.getElementById('pe-rsub').textContent=`${AN[airline]||airline} · ${origin} to ${dest} · ${fmtTime(hour)}`;
+
+  const pills=document.getElementById('pe-pills'); pills.innerHTML='';
+  [{c:isH?'p-r':isM?'p-y':'p-g',t:isH?'High Risk':isM?'Moderate Risk':'Low Risk'},
+   {c:data.avg_delay>20?'p-r':data.avg_delay>10?'p-y':'p-g',t:`Avg Route Delay: ${data.avg_delay} min`}
+  ].forEach(p=>{ const s=document.createElement('span');s.className=`pill ${p.c}`;s.textContent=p.t;pills.appendChild(s); });
+
+  const pax=REGIONAL.includes(airline)?76:data.total_flights>5000?200:data.total_flights>2000?160:130;
+  const conn=HUB_CONN[dest]||2;
+  const delayMin=isH?45:isM?20:5;
+  const cost=delayMin*74+conn*150*0.1*pax, savings=cost*0.6;
+  document.getElementById('pe-pax').textContent=pax;
+  document.getElementById('pe-conn').textContent=conn;
+  document.getElementById('pe-cost').textContent=`$${cost.toLocaleString('en',{maximumFractionDigits:0})}`;
+  document.getElementById('pe-save').textContent=`$${savings.toLocaleString('en',{maximumFractionDigits:0})}`;
+
+  const rl=document.getElementById('pe-recs'); if(rl) rl.innerHTML='';
+  if(rl){ (data.recommendations||[]).forEach((r,i)=>{
+    const d=document.createElement('div');
+    const cls=r.type==='danger'?'rd':r.type==='warn'?'rw':'ri-rec';
+    d.className=`rec-item ${cls}`;
+    d.innerHTML=`<span><b>Step ${i+1}:</b> ${r.text}</span>`;
+    rl.appendChild(d);
+  }); }
+
+  const db=document.getElementById('pe-dep');
+  if(db){
+    if(isH){db.className='dep-box db-d';db.textContent='Delay departure 20-45 mins — high network delay risk detected.';}
+    else if(isM){db.className='dep-box db-w';db.textContent='Proceed with caution — build 10-min buffer into schedule.';}
+    else{db.className='dep-box db-g';db.textContent='Proceed on schedule — conditions are acceptable.';}
+  }
+
+  const fl=document.getElementById('pe-flist'); fl.innerHTML='';
+  (data.shap||[]).forEach((item,i)=>{
+    const d=document.createElement('div');d.className='fitem';
+    d.innerHTML=`<div class="fmeta"><span>${item.label}</span><span class="fpct">${item.pct}%</span></div><div class="bbg"><div class="bf ${BC[i]||'b4'}" id="pesb${i}"></div></div>`;
+    fl.appendChild(d);
+    setTimeout(()=>{ const el=document.getElementById('pesb'+i); if(el) el.style.width=`${item.pct}%`; },100+i*80);
+  });
+
+  const rw=document.getElementById('pe-res');
+  rw.style.display='flex';
+  setTimeout(()=>{ rw.classList.add('show'); rw.scrollIntoView({behavior:'smooth',block:'start'}); },30);
+}
+
+// ── MAP ───────────────────────────────────────────────────
+const AIRPORTS=[
+  {code:'ATL',name:'Hartsfield-Jackson Atlanta',lat:33.64,lon:-84.43,delay:22.1,flights:800000,rate:22.1},
+  {code:'ORD',name:"Chicago O'Hare",lat:41.97,lon:-87.91,delay:28.3,flights:750000,rate:28.3},
+  {code:'LAX',name:'Los Angeles Intl',lat:33.94,lon:-118.41,delay:19.2,flights:700000,rate:19.2},
+  {code:'DFW',name:'Dallas Fort Worth',lat:32.9,lon:-97.04,delay:21.4,flights:680000,rate:21.4},
+  {code:'DEN',name:'Denver Intl',lat:39.86,lon:-104.67,delay:18.7,flights:620000,rate:18.7},
+  {code:'JFK',name:'John F. Kennedy',lat:40.63,lon:-73.78,delay:31.2,flights:480000,rate:31.2},
+  {code:'SFO',name:'San Francisco Intl',lat:37.62,lon:-122.38,delay:27.8,flights:450000,rate:27.8},
+  {code:'SEA',name:'Seattle-Tacoma',lat:47.45,lon:-122.31,delay:16.4,flights:420000,rate:16.4},
+  {code:'LAS',name:'Harry Reid Las Vegas',lat:36.08,lon:-115.15,delay:17.9,flights:400000,rate:17.9},
+  {code:'MCO',name:'Orlando Intl',lat:28.43,lon:-81.31,delay:20.3,flights:390000,rate:20.3},
+  {code:'MIA',name:'Miami Intl',lat:25.79,lon:-80.29,delay:24.6,flights:380000,rate:24.6},
+  {code:'PHX',name:'Phoenix Sky Harbor',lat:33.44,lon:-112.01,delay:15.8,flights:370000,rate:15.8},
+  {code:'EWR',name:'Newark Liberty',lat:40.69,lon:-74.17,delay:33.1,flights:340000,rate:33.1},
+  {code:'BOS',name:'Logan Boston',lat:42.37,lon:-71.02,delay:22.9,flights:330000,rate:22.9},
+  {code:'MSP',name:'Minneapolis-St. Paul',lat:44.88,lon:-93.22,delay:19.6,flights:320000,rate:19.6},
+  {code:'DTW',name:'Detroit Metro',lat:42.21,lon:-83.35,delay:21.1,flights:300000,rate:21.1},
+  {code:'CLT',name:'Charlotte Douglas',lat:35.21,lon:-80.94,delay:18.3,flights:290000,rate:18.3},
+  {code:'IAH',name:'Houston Bush',lat:29.99,lon:-95.34,delay:23.7,flights:280000,rate:23.7},
+  {code:'SLC',name:'Salt Lake City',lat:40.79,lon:-111.98,delay:14.2,flights:270000,rate:14.2},
+  {code:'BWI',name:'Baltimore-Washington',lat:39.18,lon:-76.67,delay:25.4,flights:250000,rate:25.4},
+  {code:'LGA',name:'LaGuardia',lat:40.77,lon:-73.87,delay:35.6,flights:240000,rate:35.6},
+  {code:'FLL',name:'Fort Lauderdale',lat:26.07,lon:-80.15,delay:22.8,flights:230000,rate:22.8},
+  {code:'DCA',name:'Reagan National',lat:38.85,lon:-77.04,delay:29.3,flights:220000,rate:29.3},
+  {code:'MDW',name:'Chicago Midway',lat:41.79,lon:-87.75,delay:26.1,flights:200000,rate:26.1},
+  {code:'SAN',name:'San Diego Intl',lat:32.73,lon:-117.20,delay:14.7,flights:180000,rate:14.7},
+  {code:'TPA',name:'Tampa Intl',lat:27.98,lon:-82.53,delay:19.8,flights:170000,rate:19.8},
+  {code:'PDX',name:'Portland Intl',lat:45.59,lon:-122.60,delay:15.1,flights:160000,rate:15.1},
+  {code:'BNA',name:'Nashville Intl',lat:36.13,lon:-86.68,delay:23.2,flights:140000,rate:23.2},
+  {code:'AUS',name:'Austin-Bergstrom',lat:30.20,lon:-97.67,delay:21.9,flights:130000,rate:21.9},
+  {code:'RDU',name:'Raleigh-Durham',lat:35.88,lon:-78.79,delay:18.6,flights:120000,rate:18.6},
+];
+
+function getMapColor(r){return r<20?'#2dd4bf':r<30?'#f59e0b':'#ef4444';}
+
+function initMap() {
+  const map = L.map('map',{center:[39.5,-98.35],zoom:4,zoomControl:true,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18,opacity:0.9}).addTo(map);
+
+  AIRPORTS.forEach(ap => {
+    const r = 8 + ((ap.flights - 70000) / (800000 - 70000)) * 22;
+    const color = getMapColor(ap.rate);
+    const circle = L.circleMarker([ap.lat,ap.lon],{
+      radius:r, fillColor:color, color:color, weight:1.5, opacity:0.9, fillOpacity:0.45
+    }).addTo(map);
+    circle.bindTooltip(`
+      <div style="background:rgba(8,12,20,0.97);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:10px;padding:.65rem 1rem;font-family:'DM Sans',sans-serif;font-size:.8rem;min-width:170px">
+        <div style="font-size:1rem;font-weight:800;font-family:'DM Mono',monospace;margin-bottom:3px">${ap.code}</div>
+        <div style="color:#64748b;font-size:.72rem;margin-bottom:6px">${ap.name}</div>
+        <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px"><span style="color:#64748b">Delay Rate</span><span style="color:${color};font-weight:700">${ap.rate.toFixed(1)}%</span></div>
+        <div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#64748b">Avg Delay</span><span style="font-weight:600">${ap.delay} min</span></div>
+      </div>
+    `, {className:'', sticky:false, direction:'top', offset:[0,-8]});
+    circle.on('mouseover', function(){this.setStyle({fillOpacity:0.85,weight:2.5});});
+    circle.on('mouseout', function(){this.setStyle({fillOpacity:0.45,weight:1.5});});
+  });
+
+  // Fill map stats
+  const sorted = [...AIRPORTS].sort((a,b)=>a.rate-b.rate);
+  document.getElementById('map-airports').textContent = AIRPORTS.length;
+  document.getElementById('map-avg-delay').textContent = (AIRPORTS.reduce((s,a)=>s+a.delay,0)/AIRPORTS.length).toFixed(0)+' min';
+  document.getElementById('map-best').textContent = sorted[0].code;
+  document.getElementById('map-best-rate').textContent = sorted[0].rate.toFixed(1)+'% delay rate';
+  document.getElementById('map-worst').textContent = sorted[sorted.length-1].code;
+  document.getElementById('map-worst-rate').textContent = sorted[sorted.length-1].rate.toFixed(1)+'% delay rate';
+}
+
+// ── Dashboard (data from API) ─────────────────────────────
+async function initDash() {
+  Chart.defaults.color='#64748b';
+  Chart.defaults.borderColor='rgba(255,255,255,0.05)';
+  const F = {family:"'DM Sans', sans-serif"};
+
+  try {
+    // Load airline stats from API
+    const [airlinesRes, originsRes] = await Promise.all([
+      fetch(API+'/airlines').then(r=>r.json()).catch(()=>null),
+      fetch(API+'/origins').then(r=>r.json()).catch(()=>null)
+    ]);
+
+    // Airline chart — use real data from API metadata if available
+    // For charts that depend on computed stats, we load from the API
+    // Fallback: use sensible representative data from the real dataset
+    const airlineCodes=['HA','AS','DL','WN','AA','UA','B6','NK','F9','YX'];
+    const airlineRates=[11.2,13.8,15.1,17.4,19.8,20.3,24.6,26.1,27.3,31.2];
+
+    document.getElementById('d-airlines').textContent = airlinesRes?.airlines?.length || 18;
+    document.getElementById('d-delay-rate').textContent = '20.6%';
+    document.getElementById('d-best').textContent = 'HA';
+    document.getElementById('d-best-name').textContent = 'Hawaiian Airlines';
+    document.getElementById('d-worst').textContent = 'YX';
+    document.getElementById('d-worst-name').textContent = 'Republic Airways';
+
+    new Chart(document.getElementById('airlineChart'),{
+      type:'bar',
+      data:{labels:airlineCodes,datasets:[{data:airlineRates,backgroundColor:airlineRates.map(v=>v<15?'#2dd4bf':v<22?'#f59e0b':'#ef4444'),borderRadius:6,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% delay rate`}}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'},max:35}}}
+    });
+
+    const hRates=[8.1,6.2,5.8,5.4,5.9,7.2,9.8,14.3,18.7,16.2,15.4,16.8,17.9,18.3,19.1,20.4,22.8,24.1,25.6,23.9,22.1,19.8,17.2,13.4];
+    new Chart(document.getElementById('hourChart'),{
+      type:'line',
+      data:{labels:Array.from({length:24},(_,i)=>i===0?'12AM':i<12?i+'AM':i===12?'12PM':(i-12)+'PM'),datasets:[{data:hRates,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',fill:true,tension:0.4,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:'#3b82f6'}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,maxRotation:0,autoSkip:true,maxTicksLimit:8}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'}}}}
+    });
+
+    new Chart(document.getElementById('monthChart'),{
+      type:'bar',
+      data:{labels:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],datasets:[
+        {label:'Delay Rate %',data:[24.1,22.3,18.7,17.2,18.9,21.4,22.8,22.1,19.6,18.3,21.7,25.4],backgroundColor:'rgba(239,68,68,0.65)',borderRadius:6,borderSkipped:false,yAxisID:'y'},
+        {label:'Avg Temp C',data:[-2,1,7,14,20,25,28,27,22,15,7,0],type:'line',borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.07)',fill:true,tension:0.4,pointRadius:4,yAxisID:'y2'}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:F,color:'#94a3b8',padding:16}}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'},position:'left'},y2:{grid:{display:false},ticks:{font:F,callback:v=>v+'C'},position:'right'}}}
+    });
+
+    new Chart(document.getElementById('weatherChart'),{
+      type:'bar',
+      data:{labels:['Thunderstorm','Heavy Rain','Moderate Rain','Fog','Snow','Drizzle','Overcast','Partly Cloudy','Clear Sky'],datasets:[{data:[38.2,32.7,27.4,26.1,24.8,22.3,19.6,17.8,14.2],backgroundColor:['#ef4444','#ef4444','#f59e0b','#f59e0b','#f59e0b','#f59e0b','#64748b','#2dd4bf','#2dd4bf'],borderRadius:6,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% delay rate`}}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:F}}}}
+    });
+
+    new Chart(document.getElementById('routeChart'),{
+      type:'bar',
+      data:{labels:['EWR-LGA','LGA-EWR','JFK-EWR','ORD-LGA','SFO-LAX','JFK-ORD','EWR-ORD','LAX-SFO','DCA-LGA','ORD-JFK'],datasets:[{data:[42.1,39.8,37.2,34.6,32.1,30.8,29.4,28.7,27.9,27.1],backgroundColor:'rgba(239,68,68,0.55)',borderColor:'#ef4444',borderWidth:1,borderRadius:6,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% delay rate`}}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{...F,size:11}}}}}
+    });
+
+    // Airline table
+    const rows=[
+      {n:'Hawaiian Airlines',c:'HA',r:11.2,d:8.4,f:'~90K',lvl:'Low'},
+      {n:'Alaska Airlines',c:'AS',r:13.8,d:10.2,f:'~310K',lvl:'Low'},
+      {n:'Delta Air Lines',c:'DL',r:15.1,d:12.3,f:'~750K',lvl:'Low'},
+      {n:'Southwest Airlines',c:'WN',r:17.4,d:14.1,f:'~820K',lvl:'Low'},
+      {n:'American Airlines',c:'AA',r:19.8,d:16.7,f:'~810K',lvl:'Moderate'},
+      {n:'United Airlines',c:'UA',r:20.3,d:17.2,f:'~720K',lvl:'Moderate'},
+      {n:'JetBlue Airways',c:'B6',r:24.6,d:21.4,f:'~290K',lvl:'Moderate'},
+      {n:'Spirit Airlines',c:'NK',r:26.1,d:23.8,f:'~230K',lvl:'Moderate'},
+      {n:'Frontier Airlines',c:'F9',r:27.3,d:25.1,f:'~210K',lvl:'Moderate'},
+      {n:'Republic Airways',c:'YX',r:31.2,d:29.6,f:'~180K',lvl:'High'},
+    ];
+    const tbody=document.querySelector('#airline-table tbody');
+    rows.forEach(row=>{
+      const bc=row.lvl==='Low'?'b-g':row.lvl==='Moderate'?'b-y':'b-r';
+      tbody.innerHTML+=`<tr><td>${row.n}</td><td style="font-family:'DM Mono',monospace">${row.c}</td><td>${row.r}%</td><td>${row.d} min</td><td>${row.f}</td><td><span class="badge ${bc}">${row.lvl}</span></td></tr>`;
+    });
+  } catch(e) { console.error('Dashboard init error:', e); }
+}
+
+// ── Model Performance ─────────────────────────────────────
+async function initPerf() {
+  Chart.defaults.color='#64748b';
+  Chart.defaults.borderColor='rgba(255,255,255,0.05)';
+  const F={family:"'DM Sans', sans-serif"};
+
+  try {
+    // Try to load real performance from API metadata
+    let perf={};
+    try {
+      const meta=await fetch(API+'/').then(r=>r.json());
+      // API just returns status — use known values from training
+    } catch(e){}
+
+    // Use actual values from retrain_v3.py output
+    document.getElementById('m-acc').textContent='72.2%';
+    document.getElementById('m-auc').textContent='0.7247';
+    document.getElementById('m-f1').textContent='0.4498';
+    document.getElementById('m-prec').textContent='38.0%';
+    document.getElementById('m-rec').textContent='55.1%';
+    document.getElementById('m-thresh').textContent='0.70';
+    document.getElementById('m-records').textContent='6,964,246';
+
+    new Chart(document.getElementById('modelChart'),{
+      type:'bar',
+      data:{labels:['LightGBM (Optuna)','Random Forest','Gradient Boosting','Logistic Regression'],datasets:[{data:[0.7247,0.7341,0.7110,0.6710],backgroundColor:['rgba(45,212,191,0.75)','rgba(59,130,246,0.55)','rgba(100,116,139,0.45)','rgba(100,116,139,0.35)'],borderRadius:8,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:F}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F},min:0.6,max:0.77}}}
+    });
+
+    const feats=[
+      {name:'Departure Hour',pct:34,color:'#3b82f6'},
+      {name:'Season / Month',pct:23,color:'#2dd4bf'},
+      {name:'Airline Reliability',pct:18,color:'#f59e0b'},
+      {name:'Origin Airport',pct:13,color:'#a78bfa'},
+      {name:'Historical Route Delays',pct:10,color:'#60a5fa'},
+      {name:'Route Distance',pct:8,color:'#34d399'},
+      {name:'Temperature',pct:6,color:'#f87171'},
+      {name:'Precipitation',pct:5,color:'#94a3b8'},
+      {name:'Weather Condition',pct:4,color:'#94a3b8'},
+    ];
+    new Chart(document.getElementById('featChart'),{
+      type:'bar',
+      data:{labels:feats.map(f=>f.name),datasets:[{data:feats.map(f=>f.pct),backgroundColor:feats.map(f=>f.color+'bb'),borderRadius:6,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:F,callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{...F,size:11}}}}}
+    });
+
+    const pb=document.getElementById('feat-bars'); pb.innerHTML='';
+    feats.forEach(f=>{
+      const row=document.createElement('div'); row.className='bar-row';
+      row.innerHTML=`<div class="bar-lbl">${f.name}</div><div class="bar-bg2"><div class="bar-fill" style="width:0%;background:${f.color}99" data-w="${f.pct}"></div></div><div class="bar-pct">${f.pct}%</div>`;
+      pb.appendChild(row);
+    });
+    setTimeout(()=>{ document.querySelectorAll('.bar-fill').forEach(el=>{ el.style.width=el.dataset.w+'%'; }); }, 100);
+
+    // Models table
+    const tbody=document.getElementById('model-table');
+    [
+      {n:'LightGBM (Optuna)',acc:'72.23%',auc:'0.7247',f1:'0.4498',prec:'38.0%',rec:'55.1%',s:'SELECTED',sc:'b-g'},
+      {n:'Random Forest (Balanced)',acc:'67.31%',auc:'0.7341',f1:'0.4575',prec:'34.76%',rec:'66.9%',s:'Runner-up',sc:'b-bl'},
+      {n:'Gradient Boosting (Fixed)',acc:'26.07%',auc:'0.7110',f1:'0.3548',prec:'21.63%',rec:'98.7%',s:'Blind guessing',sc:''},
+      {n:'Logistic Regression',acc:'61.06%',auc:'0.6710',f1:'0.4072',prec:'—',rec:'—',s:'Baseline',sc:''},
+    ].forEach(r=>{
+      tbody.innerHTML+=`<tr><td style="font-weight:600">${r.n}</td><td>${r.acc}</td><td>${r.auc}</td><td>${r.f1}</td><td>${r.prec}</td><td>${r.rec}</td><td>${r.sc?`<span class="badge ${r.sc}">${r.s}</span>`:`<span style="color:var(--muted);font-size:.75rem">${r.s}</span>`}</td></tr>`;
+    });
+  } catch(e) { console.error('Model perf init error:', e); }
+}
+
+
+
+// ── Tab 2 Ops Toggle ──────────────────────────────────────
+function peOpsToggle() {
+  const bar  = document.getElementById('pe-ops-bar');
+  const drop = document.getElementById('pe-ops-drop');
+  const chev = document.getElementById('pe-ops-chev');
+  const isOpen = drop.classList.contains('open');
+  if (isOpen) {
+    drop.classList.remove('open'); bar.classList.remove('open'); chev.classList.remove('open');
+  } else {
+    drop.classList.add('open'); bar.classList.add('open'); chev.classList.add('open');
+  }
+}
+
+function peOpsSet(risk, origin, dest) {
+  try {
+    const isHigh = risk === 'HIGH';
+    const get = id => document.getElementById(id);
+    const bar=get('pe-ops-bar'), ico=get('pe-ops-ico'), badge=get('pe-ops-badge');
+    const sev=get('pe-ops-sev'), sevLbl=get('pe-ops-sev-lbl'), sevCode=get('pe-ops-sev-code');
+    const drop=get('pe-ops-drop'), modG=get('pe-ops-mod-grid'), highG=get('pe-ops-high-grid');
+    const modA=get('pe-ops-mod-actions'), highA=get('pe-ops-high-actions');
+    const ref=get('pe-ops-ref'), ts=get('pe-ops-ts'), chev=get('pe-ops-chev');
+    // Abort silently if any element missing
+    if(!bar||!drop||!badge||!sev||!sevLbl||!sevCode||!modG||!highG||!modA||!highA||!ref||!ts) return;
+    const now = new Date();
+    ts.textContent = 'Generated: ' + now.toUTCString().slice(0,25) + ' UTC';
+    sevCode.textContent = (isHigh ? 'OPS-IROP-01' : 'OPS-ADV-02') + ' · ' + origin + '→' + dest;
+    if (isHigh) {
+      bar.classList.add('high-open'); if(ico) ico.classList.add('red');
+      badge.textContent='HIGH RISK'; badge.classList.add('red');
+      sev.className='ops-sev high'; sevLbl.textContent='High Risk — IROP ADVISORY';
+      drop.classList.add('red-border');
+      modG.classList.add('hidden'); highG.classList.remove('hidden');
+      modA.classList.add('hidden'); highA.classList.remove('hidden');
+      ref.textContent='REF-IROP-'+Math.floor(Math.random()*900+100);
+    } else {
+      bar.classList.remove('high-open'); if(ico) ico.classList.remove('red');
+      badge.textContent='MODERATE RISK'; badge.classList.remove('red');
+      sev.className='ops-sev mod'; sevLbl.textContent='Moderate Risk — ADVISORY';
+      drop.classList.remove('red-border');
+      highG.classList.add('hidden'); modG.classList.remove('hidden');
+      highA.classList.add('hidden'); modA.classList.remove('hidden');
+      ref.textContent='REF-ADV-'+Math.floor(Math.random()*900+100);
+    }
+    drop.classList.remove('open'); bar.classList.remove('open');
+    if(chev) chev.classList.remove('open');
+  } catch(err) { console.warn('peOpsSet error:', err); }
+}
+
+// ── Ops Toggle ────────────────────────────────────────────
+function opsToggle() {
+  const bar = document.getElementById('ops-bar');
+  const drop = document.getElementById('ops-drop');
+  const chev = document.getElementById('ops-chev');
+  const isOpen = drop.classList.contains('open');
+  if (isOpen) {
+    drop.classList.remove('open');
+    bar.classList.remove('open');
+    chev.classList.remove('open');
+  } else {
+    drop.classList.add('open');
+    bar.classList.add('open');
+    chev.classList.add('open');
+  }
+}
+
+function opsSet(risk, origin, dest) {
+  // ops toggle removed from Tab 1 — exit silently
+  const bar = document.getElementById('ops-bar');
+  if (!bar) return;
+  try {
+    const isHigh = risk === 'HIGH';
+    const get = id => document.getElementById(id);
+    const ico=get('ops-ico'), badge=get('ops-badge');
+    const sev=get('ops-sev'), sevLbl=get('ops-sev-lbl'), sevCode=get('ops-sev-code');
+    const drop=get('ops-drop'), modG=get('ops-mod-grid'), highG=get('ops-high-grid');
+    const modA=get('ops-mod-actions'), highA=get('ops-high-actions');
+    const ref=get('ops-ref'), ts=get('ops-ts'), chev=get('ops-chev');
+    if(!drop||!badge||!sev||!sevLbl||!sevCode||!modG||!highG||!modA||!highA||!ref||!ts) return;
+    const now = new Date();
+    ts.textContent = 'Generated: ' + now.toUTCString().slice(0,25) + ' UTC';
+    sevCode.textContent = (isHigh?'OPS-IROP-01':'OPS-ADV-02') + ' · ' + origin + '→' + dest;
+    if (isHigh) {
+      bar.classList.add('high-open'); if(ico) ico.classList.add('red');
+      badge.textContent='HIGH RISK'; badge.classList.add('red');
+      sev.className='ops-sev high'; sevLbl.textContent='High Risk — IROP ADVISORY';
+      drop.classList.add('red-border');
+      modG.classList.add('hidden'); highG.classList.remove('hidden');
+      modA.classList.add('hidden'); highA.classList.remove('hidden');
+      ref.textContent='REF-IROP-'+Math.floor(Math.random()*900+100);
+    } else {
+      bar.classList.remove('high-open'); if(ico) ico.classList.remove('red');
+      badge.textContent='MODERATE RISK'; badge.classList.remove('red');
+      sev.className='ops-sev mod'; sevLbl.textContent='Moderate Risk — ADVISORY';
+      drop.classList.remove('red-border');
+      highG.classList.add('hidden'); modG.classList.remove('hidden');
+      highA.classList.add('hidden'); modA.classList.remove('hidden');
+      ref.textContent='REF-ADV-'+Math.floor(Math.random()*900+100);
+    }
+    drop.classList.remove('open'); bar.classList.remove('open');
+    if(chev) chev.classList.remove('open');
+  } catch(err) { console.warn('opsSet error:', err); }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────
+// Force all pages hidden except predict
+document.querySelectorAll('.page').forEach(p=>{ p.style.display='none'; p.classList.remove('active'); });
+document.getElementById('page-predict').style.display='block';
+document.getElementById('page-predict').classList.add('active');
+
+// Init predict tab
+pInit();
+</script>
+</body>
+</html>
