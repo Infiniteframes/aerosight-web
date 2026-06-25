@@ -1,0 +1,15 @@
+{
+  "DepHour": 13.0,
+  "day_of_week": 4.0,
+  "month": 7.0,
+  "distance": 680.0,
+  "AvgWeatherDelay_Route": 0.13333333333333333,
+  "AvgNASDelay_Origin": 2.537392084314385,
+  "AvgLateAircraft_Airline": 5.2498034002396645,
+  "AvgCarrierDelay_Airline": 4.460429600247229,
+  "temp_c": 18.5,
+  "windspeed_kmh": 10.8,
+  "precip_mm": 0.0,
+  "weathercode": 2.0,
+  "weather_severity": 0.0
+}

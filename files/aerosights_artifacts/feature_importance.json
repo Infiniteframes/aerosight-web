@@ -1,0 +1,16 @@
+{
+  "DepHour": 2156,
+  "month": 2325,
+  "AvgLateAircraft_Airline": 2811,
+  "AvgWeatherDelay_Route": 1721,
+  "temp_c": 2932,
+  "weathercode": 994,
+  "precip_mm": 918,
+  "distance": 3013,
+  "windspeed_kmh": 2654,
+  "Dest_enc": 2418,
+  "day_of_week": 1400,
+  "Origin_enc": 3247,
+  "IsWeekend": 43,
+  "Airline_enc": 2163
+}

@@ -1,0 +1,20 @@
+{
+  "model_name": "LightGBM (Optuna)",
+  "best_threshold": 0.7000000000000002,
+  "selected_features": [
+    "DepHour",
+    "month",
+    "AvgLateAircraft_Airline",
+    "AvgWeatherDelay_Route",
+    "temp_c",
+    "weathercode",
+    "precip_mm",
+    "distance",
+    "windspeed_kmh",
+    "Dest_enc",
+    "day_of_week",
+    "Origin_enc",
+    "IsWeekend",
+    "Airline_enc"
+  ]
+}
